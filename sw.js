@@ -1,4 +1,4 @@
-const CACHE = "el-impostor-v2";
+const CACHE = "el-impostor-v3";
 const ASSETS = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icons/icon.svg"];
 
 self.addEventListener("install", event => {

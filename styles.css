@@ -91,9 +91,14 @@ h2 { margin-bottom: 12px; font-size: clamp(2rem, 9vw, 3.25rem); line-height: 1; 
 .rule p { margin: 2px 0 0; color: var(--muted); line-height: 1.42; font-size: .92rem; }
 
 .player-list { display: grid; gap: 8px; margin: 18px 0 26px; }
+.player-count-box { margin: 20px 0 10px; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
+.count-stepper { display: grid; grid-template-columns: 48px 1fr 48px; gap: 12px; align-items: center; text-align: center; }
+.count-stepper strong { font-size: 2.3rem; line-height: 1; }
+.step-button { width: 48px; height: 48px; border: 1px solid var(--line); border-radius: 14px; color: var(--ink); background: var(--panel-2); font-size: 1.6rem; cursor: pointer; }
+.step-button:disabled { opacity: .3; cursor: default; }
 .impostor-selector { margin: 20px 0 6px; padding: 18px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); }
 .selector-label { display: block; margin-bottom: 12px; font-weight: 850; }
-.segmented { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.segmented { display: grid; grid-template-columns: repeat(var(--segments, 3), 1fr); gap: 7px; }
 .segment { min-height: 46px; border: 1px solid var(--line); border-radius: 13px; color: var(--muted); background: var(--panel-2); font-weight: 900; cursor: pointer; }
 .segment.active { color: #1a100c; border-color: var(--accent); background: var(--accent); }
 .impostor-selector p { margin: 11px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.4; }

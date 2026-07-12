@@ -13,10 +13,13 @@ const WORDS = [
 
 const ICON_EYE = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>`;
 
+const initialPlayerCount = loadPlayerCount();
+
 const state = {
   screen: "home",
-  names: loadNames(),
-  impostorCount: loadImpostorCount(),
+  playerCount: initialPlayerCount,
+  names: loadNames(initialPlayerCount),
+  impostorCount: Math.min(loadImpostorCount(), maxImpostorsFor(initialPlayerCount)),
   word: "",
   impostors: [],
   revealIndex: 0,
@@ -33,12 +36,17 @@ const state = {
 
 const app = document.querySelector("#app");
 
-function loadNames() {
+function loadPlayerCount() {
+  const saved = Number(localStorage.getItem("player-count"));
+  return Number.isInteger(saved) && saved >= 4 && saved <= 15 ? saved : 9;
+}
+
+function loadNames(count) {
   try {
     const saved = JSON.parse(localStorage.getItem("impostor-names"));
-    if (Array.isArray(saved) && saved.length === 9) return saved;
+    if (Array.isArray(saved)) return Array.from({ length: count }, (_, i) => saved[i] || `Jugador ${i + 1}`);
   } catch (_) {}
-  return Array.from({ length: 9 }, (_, i) => `Jugador ${i + 1}`);
+  return Array.from({ length: count }, (_, i) => `Jugador ${i + 1}`);
 }
 
 function saveNames() {
@@ -48,6 +56,20 @@ function saveNames() {
 function loadImpostorCount() {
   const saved = Number(localStorage.getItem("impostor-count"));
   return [1, 2, 3].includes(saved) ? saved : 1;
+}
+
+function maxImpostorsFor(playerCount) {
+  if (playerCount >= 8) return 3;
+  if (playerCount >= 5) return 2;
+  return 1;
+}
+
+function maxImpostors() {
+  return maxImpostorsFor(state.playerCount);
+}
+
+function majorityNeeded() {
+  return Math.floor(state.playerCount / 2) + 1;
 }
 
 function randomIndex(max) {
@@ -60,7 +82,7 @@ function randomIndex(max) {
 }
 
 function shuffledIndexes() {
-  const items = Array.from({ length: 9 }, (_, i) => i);
+  const items = Array.from({ length: state.playerCount }, (_, i) => i);
   for (let i = items.length - 1; i > 0; i--) {
     const j = randomIndex(i + 1);
     [items[i], items[j]] = [items[j], items[i]];
@@ -114,26 +136,31 @@ function render() {
 
 function homeView() {
   return `<section class="screen">
-    ${topbar('<span class="round-pill">9 jugadores</span>')}
+    ${topbar('<span class="round-pill">Jugadores configurables</span>')}
     <span class="eyebrow">Engaña · Deduce · Sobrevive</span>
     <h1>¿Quién está<br><span class="accent">fingiendo?</span></h1>
     <p class="lead">La mayoría conoce la palabra. Entre uno y tres improvisan. El móvil sabe la verdad.</p>
     <div class="hero-eye"><div class="eye-shape"><div class="iris"><div class="pupil"></div></div></div></div>
-    <div class="stats"><div class="stat"><strong>9</strong><span>jugadores</span></div><div class="stat"><strong>1–3</strong><span>impostores</span></div><div class="stat"><strong>0</strong><span>internet</span></div></div>
+    <div class="stats"><div class="stat"><strong>4–15</strong><span>jugadores</span></div><div class="stat"><strong>1–3</strong><span>impostores</span></div><div class="stat"><strong>0</strong><span>internet</span></div></div>
     <div class="spacer"></div>
     <div class="button-stack"><button class="btn btn-primary" data-action="setup">Preparar partida</button><button class="btn btn-ghost" data-action="rules">Cómo se juega</button></div>
   </section>`;
 }
 
 function setupView() {
+  const availableImpostors = Array.from({ length: maxImpostors() }, (_, i) => i + 1);
   return `<section class="screen">
     ${topbar('<button class="icon-button" data-action="home" aria-label="Volver">✕</button>')}
     <span class="eyebrow">Antes de empezar</span><h2>¿Quién juega?</h2>
-    <p class="lead">Escribe los nombres en el orden en que estáis sentados. Sois exactamente nueve.</p>
+    <p class="lead">Elige cuántos sois y escribe los nombres en el orden en que estáis sentados.</p>
+    <div class="player-count-box">
+      <span class="selector-label">Número de jugadores</span>
+      <div class="count-stepper"><button class="step-button" data-action="decrease-players" ${state.playerCount === 4 ? "disabled" : ""} aria-label="Quitar un jugador">−</button><strong>${state.playerCount}</strong><button class="step-button" data-action="increase-players" ${state.playerCount === 15 ? "disabled" : ""} aria-label="Añadir un jugador">+</button></div>
+    </div>
     <div class="impostor-selector" role="group" aria-label="Número de impostores">
       <span class="selector-label">Número de impostores</span>
-      <div class="segmented">${[1, 2, 3].map(count => `<button class="segment ${state.impostorCount === count ? "active" : ""}" data-impostor-count="${count}" aria-pressed="${state.impostorCount === count}">${count}</button>`).join("")}</div>
-      <p>${state.impostorCount === 1 ? "La experiencia clásica: 8 conocen la palabra." : `${9 - state.impostorCount} conocen la palabra y ${state.impostorCount} improvisan por separado.`}</p>
+      <div class="segmented" style="--segments:${availableImpostors.length}">${availableImpostors.map(count => `<button class="segment ${state.impostorCount === count ? "active" : ""}" data-impostor-count="${count}" aria-pressed="${state.impostorCount === count}">${count}</button>`).join("")}</div>
+      <p>${state.impostorCount === 1 ? `La experiencia clásica: ${state.playerCount - 1} conocen la palabra.` : `${state.playerCount - state.impostorCount} conocen la palabra y ${state.impostorCount} improvisan por separado.`}</p>
     </div>
     <div class="player-list">${state.names.map((name, i) => `<label class="player-row"><span class="player-number">${i + 1}</span><input class="player-input" data-player="${i}" value="${escapeHtml(name)}" maxlength="18" autocomplete="off" aria-label="Nombre del jugador ${i + 1}"></label>`).join("")}</div>
     <button class="btn btn-primary" data-action="start">Repartir roles en secreto</button>
@@ -144,20 +171,20 @@ function rulesView() {
   const rules = [
     ["1", "Elegid entre 1 y 3 impostores. El móvil los selecciona y muestra la palabra al resto."],
     ["2", "Cada persona dice exactamente una palabra, sin repetir ni usar derivados de la palabra secreta."],
-    ["3", "Tras las 9 pistas tenéis 3 minutos para debatir, sin enseñar las tarjetas."],
-    ["4", "Con uno hacen falta 5 votos. Con varios, quedan acusados los más votados: tantos como impostores haya."],
+    ["3", `Tras las ${state.playerCount} pistas tenéis 3 minutos para debatir, sin enseñar las tarjetas.`],
+    ["4", `Con uno hacen falta ${majorityNeeded()} votos. Con varios, quedan acusados los más votados: tantos como impostores haya.`],
     ["5", "Si atrapáis a todos, tienen una respuesta conjunta para intentar robar la victoria."]
   ];
   return `<section class="screen">${topbar('<button class="icon-button" data-action="home" aria-label="Cerrar">✕</button>')}
-    <span class="eyebrow">Reglas para nueve</span><h2>Una palabra.<br>Nueve sospechosos.</h2>
+    <span class="eyebrow">Reglas para ${state.playerCount}</span><h2>Una palabra.<br>${state.playerCount} sospechosos.</h2>
     <div class="rule-list">${rules.map(([n, t]) => `<div class="rule"><span class="rule-num">${n}</span><p>${t}</p></div>`).join("")}</div>
-    <div class="card"><strong>Los empates les favorecen</strong><p class="role-help">Con un impostor hacen falta 5 votos. Con varios, un empate en el último puesto acusado significa que los impostores escapan.</p></div>
+    <div class="card"><strong>Los empates les favorecen</strong><p class="role-help">Con un impostor hacen falta ${majorityNeeded()} votos. Con varios, un empate en el último puesto acusado significa que los impostores escapan.</p></div>
     <div class="spacer"></div><button class="btn btn-primary" data-action="setup">Entendido</button>
   </section>`;
 }
 
 function progressDots() {
-  return `<div class="progress" aria-label="Jugador ${state.revealIndex + 1} de 9">${Array.from({ length: 9 }, (_, i) => `<span class="progress-dot ${i <= state.revealIndex ? "done" : ""}"></span>`).join("")}</div>`;
+  return `<div class="progress" aria-label="Jugador ${state.revealIndex + 1} de ${state.playerCount}">${Array.from({ length: state.playerCount }, (_, i) => `<span class="progress-dot ${i <= state.revealIndex ? "done" : ""}"></span>`).join("")}</div>`;
 }
 
 function handoffView() {
@@ -186,7 +213,7 @@ function roleView() {
 
 function cluesView() {
   const playerIndex = state.order[state.turn];
-  return `<section class="screen">${topbar(`<span class="round-pill">Pista ${state.turn + 1} de 9</span>`)}
+  return `<section class="screen">${topbar(`<span class="round-pill">Pista ${state.turn + 1} de ${state.playerCount}</span>`)}
     <span class="eyebrow">Ronda de pistas</span><h2>Una sola palabra.</h2>
     <div class="turn-order">${state.order.map((idx, i) => `<span class="turn-chip ${i < state.turn ? "done" : i === state.turn ? "active" : ""}">${escapeHtml(state.names[idx])}</span>`).join("")}</div>
     <p class="lead">Es el turno de</p><h2 class="current-player">${escapeHtml(state.names[playerIndex])}</h2>
@@ -212,10 +239,11 @@ function debateView() {
 
 function voteView() {
   const multiple = state.impostorCount > 1;
+  const majority = majorityNeeded();
   return `<section class="screen">${topbar('<span class="round-pill">Votación</span>')}
     <span class="eyebrow">Sin cambiar el voto</span><h2>Todos a la vez.</h2>
     <p class="lead">Decidid vuestro sospechoso. A la de tres, señalad a esa persona con el dedo.</p>
-    <div class="card vote-box"><span class="vote-number">${multiple ? `TOP ${state.impostorCount}` : "5+"}</span><strong>${multiple ? "personas quedarán acusadas" : "votos para atraparlo"}</strong><p class="role-help">${multiple ? `Cada persona vota a un sospechoso. Acusad a los ${state.impostorCount} más votados; un empate en el último puesto hace escapar a los impostores.` : "Si nadie recibe al menos cinco votos, el impostor escapa y gana la ronda."}</p></div>
+    <div class="card vote-box"><span class="vote-number">${multiple ? `TOP ${state.impostorCount}` : `${majority}+`}</span><strong>${multiple ? "personas quedarán acusadas" : "votos para atraparlo"}</strong><p class="role-help">${multiple ? `Cada persona vota a un sospechoso. Acusad a los ${state.impostorCount} más votados; un empate en el último puesto hace escapar a los impostores.` : `Si nadie recibe al menos ${majority} votos, el impostor escapa y gana la ronda.`}</p></div>
     <div class="rule-list"><div class="rule"><span class="rule-num">1</span><p>Preparad un único voto en silencio.</p></div><div class="rule"><span class="rule-num">2</span><p>Contad «uno, dos, tres».</p></div><div class="rule"><span class="rule-num">3</span><p>Señalad y contad los votos.</p></div></div>
     <div class="spacer"></div><button class="btn btn-primary" data-action="reveal">Revelar al impostor</button>
   </section>`;
@@ -223,10 +251,11 @@ function voteView() {
 
 function revealView() {
   const names = impostorNames();
+  const majority = majorityNeeded();
   return `<section class="screen">${topbar('<span class="round-pill">La verdad</span>')}
     <span class="eyebrow">${state.impostorCount === 1 ? "El impostor era" : "Los impostores eran"}</span><h2 class="reveal-name">${names}</h2>
-    <p class="lead">${state.impostorCount === 1 ? "¿Recibió al menos 5 votos?" : `¿Eran exactamente las ${state.impostorCount} personas más votadas, sin empates?`}</p>
-    <div class="card vote-box"><span class="vote-number">${state.impostorCount === 1 ? "5+" : `${state.impostorCount}/${state.impostorCount}`}</span><strong>${state.impostorCount === 1 ? "votos para atraparlo" : "impostores encontrados"}</strong><p class="role-help">La palabra sigue oculta por si tienen derecho a su último intento.</p></div>
+    <p class="lead">${state.impostorCount === 1 ? `¿Recibió al menos ${majority} votos?` : `¿Eran exactamente las ${state.impostorCount} personas más votadas, sin empates?`}</p>
+    <div class="card vote-box"><span class="vote-number">${state.impostorCount === 1 ? `${majority}+` : `${state.impostorCount}/${state.impostorCount}`}</span><strong>${state.impostorCount === 1 ? "votos para atraparlo" : "impostores encontrados"}</strong><p class="role-help">La palabra sigue oculta por si tienen derecho a su último intento.</p></div>
     <div class="spacer"></div><div class="button-stack"><button class="btn btn-primary" data-action="caught">Sí, ${state.impostorCount === 1 ? "lo atrapamos" : "los atrapamos a todos"}</button><button class="btn btn-secondary" data-action="escaped">No, ${state.impostorCount === 1 ? "logró" : "lograron"} escapar</button></div>
   </section>`;
 }
@@ -243,7 +272,7 @@ function guessView() {
 
 function resultView() {
   const groupWon = state.result === "group";
-  const reason = state.result === "escaped" ? (state.impostorCount === 1 ? "No hubo una mayoría de 5 votos contra el impostor." : "El grupo no identificó a todos los impostores sin empates.") : state.result === "stolen" ? `${state.impostorCount === 1 ? "Atrapado" : "Atrapados"}, pero ${state.impostorCount === 1 ? "dedujo" : "dedujeron"} la palabra exacta.` : `El grupo encontró a ${state.impostorCount === 1 ? "el impostor" : "todos los impostores"} y fallaron su último intento.`;
+  const reason = state.result === "escaped" ? (state.impostorCount === 1 ? `No hubo una mayoría de ${majorityNeeded()} votos contra el impostor.` : "El grupo no identificó a todos los impostores sin empates.") : state.result === "stolen" ? `${state.impostorCount === 1 ? "Atrapado" : "Atrapados"}, pero ${state.impostorCount === 1 ? "dedujo" : "dedujeron"} la palabra exacta.` : `El grupo encontró a ${state.impostorCount === 1 ? "el impostor" : "todos los impostores"} y fallaron su último intento.`;
   return `<section class="screen">${topbar(`<span class="round-pill">Ronda ${state.round}</span>`)}
     <div class="result-mark ${groupWon ? "" : "bad"}">${groupWon ? "✓" : "?"}</div>
     <span class="eyebrow">${groupWon ? "Victoria del grupo" : "Victoria del impostor"}</span>
@@ -279,17 +308,17 @@ function handleAction(event) {
   if (action === "start") {
     state.names = state.names.map((name, i) => name.trim() || `Jugador ${i + 1}`);
     const lowered = state.names.map(name => name.toLocaleLowerCase("es"));
-    if (new Set(lowered).size !== 9) return toast("Usad nueve nombres diferentes para evitar confusiones.");
+    if (new Set(lowered).size !== state.playerCount) return toast(`Usad ${state.playerCount} nombres diferentes para evitar confusiones.`);
     saveNames();
     newRound();
   }
   if (action === "show-role") go("role");
   if (action === "hide-role") {
-    if (state.revealIndex < 8) { state.revealIndex += 1; go("handoff"); }
+    if (state.revealIndex < state.playerCount - 1) { state.revealIndex += 1; go("handoff"); }
     else go("clues");
   }
   if (action === "next-clue") {
-    if (state.turn < 8) { state.turn += 1; render(); }
+    if (state.turn < state.playerCount - 1) { state.turn += 1; render(); }
     else go("debate");
   }
   if (action === "toggle-timer") toggleTimer();
@@ -299,6 +328,19 @@ function handleAction(event) {
   if (action === "escaped") { state.result = "escaped"; go("result"); }
   if (action === "check-guess") checkGuess();
   if (action === "again") { state.round += 1; newRound(); }
+  if (action === "decrease-players") changePlayerCount(-1);
+  if (action === "increase-players") changePlayerCount(1);
+}
+
+function changePlayerCount(delta) {
+  const next = Math.min(15, Math.max(4, state.playerCount + delta));
+  if (next === state.playerCount) return;
+  state.playerCount = next;
+  state.names = Array.from({ length: next }, (_, i) => state.names[i] || `Jugador ${i + 1}`);
+  state.impostorCount = Math.min(state.impostorCount, maxImpostors());
+  localStorage.setItem("player-count", String(state.playerCount));
+  localStorage.setItem("impostor-count", String(state.impostorCount));
+  render();
 }
 
 function toggleTimer() {

@@ -1,6 +1,6 @@
 # El Impostor
 
-Juego social para **9 personas** con selección manual de **1, 2 o 3 impostores**. Es una aplicación web instalable (PWA), gratuita y preparada para funcionar sin conexión.
+Juego social para **4 a 15 personas**, con selección manual del número de jugadores y de **1, 2 o 3 impostores**. Es una aplicación web instalable (PWA), gratuita y preparada para funcionar sin conexión.
 
 ## Jugar en el móvil
 
