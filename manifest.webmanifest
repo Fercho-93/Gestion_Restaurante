@@ -1,0 +1,20 @@
+{
+  "name": "El Impostor — Juego para 9",
+  "short_name": "El Impostor",
+  "description": "Juego social de engaño y deducción para 9 personas, completamente offline.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16130f",
+  "theme_color": "#16130f",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
