@@ -70,8 +70,8 @@ func _pan(relative: Vector2) -> void:
 	right.y = 0.0
 	var forward := -global_transform.basis.z
 	forward.y = 0.0
-	target -= right.normalized() * relative.x * units_per_pixel
-	target += forward.normalized() * relative.y * units_per_pixel / sin(deg_to_rad(-PITCH_DEG))
+	target += right.normalized() * relative.x * units_per_pixel
+	target -= forward.normalized() * relative.y * units_per_pixel / sin(deg_to_rad(-PITCH_DEG))
 	target.x = clampf(target.x, BOUNDS.position.x, BOUNDS.end.x)
 	target.z = clampf(target.z, BOUNDS.position.y, BOUNDS.end.y)
 	_apply()
