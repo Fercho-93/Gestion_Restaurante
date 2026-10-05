@@ -1,27 +1,32 @@
 extends Node2D
 ## Suelo isométrico provisional dibujado por código (hasta tener gráficos).
-## Muestra las zonas del local y resalta la celda tocada.
+## Pinta la calle y las zonas del local, y resalta la celda seleccionada.
 
-signal cell_tapped(cell: Vector2i)
+const STREET_COLOR := Color("9aa3a8")
 
-@export var size := Vector2i(12, 10)
+var layout: RestaurantLayout
+var selected_cell := Vector2i(-999, -999)
 
-## Zonas provisionales: rectángulo de celdas -> color.
-var zones := [
-	{ "nombre": "Comedor", "rect": Rect2i(0, 0, 8, 10), "color": Color("e9c79a") },
-	{ "nombre": "Cocina", "rect": Rect2i(8, 0, 4, 6), "color": Color("b9d4d8") },
-	{ "nombre": "Almacén", "rect": Rect2i(8, 6, 4, 4), "color": Color("c9c0b4") },
-]
 
-var selected_cell := Vector2i(-1, -1)
+func setup(restaurant_layout: RestaurantLayout) -> void:
+	layout = restaurant_layout
+	queue_redraw()
+
+
+func select(cell: Vector2i) -> void:
+	selected_cell = cell
+	queue_redraw()
 
 
 func _draw() -> void:
-	for x in size.x:
-		for y in size.y:
+	if layout == null:
+		return
+	var r := layout.region
+	for x in range(r.position.x, r.end.x):
+		for y in range(r.position.y, r.end.y):
 			var cell := Vector2i(x, y)
 			var poly := Iso.cell_polygon(cell)
-			var color := _zone_color(cell)
+			var color := _cell_color(cell)
 			if (x + y) % 2 == 0:
 				color = color.darkened(0.06)
 			if cell == selected_cell:
@@ -30,24 +35,10 @@ func _draw() -> void:
 			draw_polyline(poly + PackedVector2Array([poly[0]]), Color(0, 0, 0, 0.12), 1.0)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch and not event.pressed and not event.canceled:
-		var cell := Iso.screen_to_cell(get_global_mouse_position())
-		if Rect2i(Vector2i.ZERO, size).has_point(cell):
-			selected_cell = cell
-			queue_redraw()
-			cell_tapped.emit(cell)
-
-
-func zone_name_at(cell: Vector2i) -> String:
-	for zone in zones:
-		if zone["rect"].has_point(cell):
-			return zone["nombre"]
-	return ""
-
-
-func _zone_color(cell: Vector2i) -> Color:
-	for zone in zones:
+func _cell_color(cell: Vector2i) -> Color:
+	if cell.x < 0:
+		return STREET_COLOR
+	for zone in layout.zones:
 		if zone["rect"].has_point(cell):
 			return zone["color"]
 	return Color("dddddd")

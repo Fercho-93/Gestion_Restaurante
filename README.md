@@ -12,7 +12,9 @@ Juego de gestión de restaurantes para móvil (Android e iOS), hecho con **Godot
 3. Pulsa **F5** para jugar.
 
 Controles provisionales: arrastrar para mover la cámara, rueda/pellizco para zoom,
-tocar una baldosa para ver su zona, barra espaciadora para pausar.
+tocar una persona o una baldosa para ver detalles, barra espaciadora para pausar.
+
+![Servicio de comidas](docs/captura_fase1_servicio.png)
 
 ## Pruebas
 

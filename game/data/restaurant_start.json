@@ -1,0 +1,50 @@
+{
+	"dinero_inicial": 25000,
+	"hora_apertura": 12,
+	"ultima_entrada": 23,
+	"costes_fijos_dia": { "alquiler": 90, "suministros": 35 },
+	"local": {
+		"tamano": [12, 10],
+		"ambiente": 60,
+		"limpieza": 70,
+		"zonas": [
+			{ "nombre": "Comedor", "rect": [0, 0, 8, 10], "color": "e9c79a" },
+			{ "nombre": "Cocina", "rect": [8, 0, 4, 6], "color": "b9d4d8" },
+			{ "nombre": "Almacén", "rect": [8, 6, 4, 4], "color": "c9c0b4", "bloqueada": true }
+		],
+		"mesas": [
+			{ "celda": [2, 2], "plazas": 4 },
+			{ "celda": [5, 2], "plazas": 4 },
+			{ "celda": [2, 5], "plazas": 2 },
+			{ "celda": [5, 5], "plazas": 4 },
+			{ "celda": [2, 8], "plazas": 2 },
+			{ "celda": [5, 8], "plazas": 2 }
+		],
+		"barra_cocina": [[8, 0], [8, 1], [8, 3], [8, 4], [8, 5], [8, 2]],
+		"pase": [7, 2],
+		"puesto_camareros": [7, 4],
+		"puestos_cocina": [[9, 1], [9, 4]],
+		"aparicion": [-2, 9],
+		"cola": [[-1, 8], [-1, 7], [-1, 6], [-1, 5], [-1, 4], [-1, 3]]
+	},
+	"personal": [
+		{ "nombre": "Lucía", "puesto": "camarero", "velocidad": 65, "trato": 75, "salario_dia": 70 },
+		{ "nombre": "Marcos", "puesto": "camarero", "velocidad": 50, "trato": 55, "salario_dia": 65 },
+		{ "nombre": "Ana", "puesto": "cocinero", "habilidad": 70, "velocidad": 60, "salario_dia": 90 },
+		{ "nombre": "Pedro", "puesto": "cocinero", "habilidad": 50, "velocidad": 55, "salario_dia": 75 }
+	],
+	"carta": [
+		{ "receta": "ensalada_mixta", "precio": 8.5 },
+		{ "receta": "tortilla_patatas", "precio": 9.0 },
+		{ "receta": "paella_marisco", "precio": 17.0 },
+		{ "receta": "pollo_asado", "precio": 13.5 },
+		{ "receta": "entrecot", "precio": 22.0 },
+		{ "receta": "macarrones_queso", "precio": 10.0 },
+		{ "receta": "flan", "precio": 4.5 }
+	],
+	"stock_objetivo": {
+		"lechuga": 8, "tomate": 7, "cebolla": 3, "patata": 12, "huevo": 90,
+		"aceite_oliva": 5, "pasta": 3, "arroz": 3, "pollo": 5, "ternera": 4,
+		"gambas": 2, "queso": 1.5, "leche": 3
+	}
+}

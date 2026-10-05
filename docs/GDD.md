@@ -205,8 +205,8 @@ Reglas:
 
 | Fase | Contenido | Hito |
 |---|---|---|
-| 0 · Preproducción | GDD, proyecto base, reloj, mundo isométrico de prueba | ✅ en curso |
-| 1 · Prototipo (MVP) | Un local fijo, clientes que entran/piden/comen/pagan, 2-3 empleados, carta de 5-10 platos, inventario básico, informe diario | ¿Es divertido el ciclo básico? |
+| 0 · Preproducción | GDD, proyecto base, reloj, mundo isométrico de prueba | ✅ hecho |
+| 1 · Prototipo (MVP) | Un local fijo, clientes que entran/piden/comen/pagan, 2-3 empleados, carta de 5-10 platos, inventario básico, informe diario | 🔨 en curso: ciclo de servicio jugable |
 | 2 · Núcleo de gestión | Contratación y atributos, proveedores y caducidad, escandallo, finanzas, satisfacción y reputación, guardado | Partida de varios días con sentido |
 | 3 · Construcción | Editor isométrico de distribución y decoración, ubicación y locales | El jugador monta su propio local |
 | 4 · Profundidad | Eventos, tipos de cocina, temporadas, progresión, varios locales | Partida larga |
@@ -214,7 +214,28 @@ Reglas:
 
 ---
 
-## 10. Pendiente de decidir
+## 10. Estado de la Fase 1
+
+Hecho:
+- Clientes en grupos (1-4) que llegan por la calle según la hora (picos de comida y cena),
+  hacen cola, se sientan, piden, esperan, comen, piden la cuenta, pagan y se van.
+- Paciencia por fase: si esperan demasiado se enfadan y, al doble, se marchan
+  (sin mesa, sin que les tomen nota, comida lenta o incluso sin pagar).
+- Camareros con prioridades (servir > cobrar > tomar nota), que caminan por el local
+  esquivando mesas (A*). Velocidad y trato influyen.
+- Cocineros que preparan varios platos a la vez; su habilidad marca la calidad.
+- Inventario que se gasta con cada plato y pedido automático diario a las 11:00.
+- Elección de plato según la relación precio/valor de la carta.
+- Satisfacción según la fórmula del apartado 5.7, propinas (para el personal) y reputación,
+  que hace venir más o menos clientes.
+- Informe de cierre del día con caja, gastos, beneficio y platos más vendidos.
+- Pulsar sobre una persona muestra su estado; sobre el suelo, la zona.
+
+Siguiente:
+- Pantallas de gestión: carta y precios, personal, almacén.
+- Personajes definitivos y animaciones.
+
+## 11. Pendiente de decidir
 
 - Diseño del personaje gestor.
 - Monetización.

@@ -17,7 +17,7 @@ config/features=PackedStringArray("4.5", "GL Compatibility")
 [autoload]
 
 GameData="*res://simulation/game_data.gd"
-GameClock="*res://simulation/game_clock.gd"
+Game="*res://simulation/game.gd"
 
 [display]
 

@@ -20,21 +20,24 @@ var speed: int = 1
 var _speed_before_pause: int = 1
 
 
-func _init(start_day: int = 1, start_hour: int = 10) -> void:
-	total_minutes = (start_day - 1) * MINUTES_PER_DAY + start_hour * 60
+func _init(start_day: int = 1, start_hour: int = 10, start_minute: int = 0) -> void:
+	total_minutes = (start_day - 1) * MINUTES_PER_DAY + start_hour * 60 + start_minute
 
 
-func advance(real_seconds: float) -> void:
+## Avanza el reloj según el tiempo real transcurrido. Devuelve los minutos de juego avanzados.
+func advance(real_seconds: float) -> float:
 	if speed == 0:
-		return
+		return 0.0
 	var before := int(total_minutes)
-	total_minutes += real_seconds * MINUTES_PER_SECOND * speed
+	var advanced := real_seconds * MINUTES_PER_SECOND * speed
+	total_minutes += advanced
 	for m in range(before + 1, int(total_minutes) + 1):
 		minute_passed.emit(m)
 		if m % 60 == 0:
 			hour_changed.emit(_day_of(m), (m % MINUTES_PER_DAY) / 60)
 		if m % MINUTES_PER_DAY == 0:
 			day_changed.emit(_day_of(m))
+	return advanced
 
 
 func set_speed(new_speed: int) -> void:
