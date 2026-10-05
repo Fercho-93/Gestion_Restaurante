@@ -11,7 +11,6 @@ func _init() -> void:
 	test_clock_advances_with_speed()
 	test_clock_pause_and_resume()
 	test_clock_emits_hour_and_day()
-	test_iso_round_trip()
 	test_data_is_valid()
 	test_recipe_cost()
 	test_layout_paths_avoid_tables()
@@ -19,6 +18,7 @@ func _init() -> void:
 	test_inventory_restock_and_consume()
 	test_satisfaction_bounds()
 	test_full_day_simulation()
+	test_bot_builds_for_every_role()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -73,15 +73,6 @@ func test_clock_emits_hour_and_day() -> void:
 	clock.advance(30.0) # 120 minutos: 23:00 -> 01:00
 	check(events["horas"] == 2, "dos cambios de hora, hubo %d" % events["horas"])
 	check(events["dias"] == [2], "cambio al día 2: %s" % str(events["dias"]))
-
-
-func test_iso_round_trip() -> void:
-	for x in range(-3, 15):
-		for y in range(-3, 15):
-			var cell := Vector2i(x, y)
-			var center := Iso.cell_to_screen(cell)
-			check(Iso.screen_to_cell(center) == cell, "ida y vuelta iso %s" % str(cell))
-			check(Iso.screen_to_cell(center + Vector2(40, 10)) == cell, "punto dentro del rombo %s" % str(cell))
 
 
 func test_data_is_valid() -> void:
@@ -185,3 +176,20 @@ func test_full_day_simulation() -> void:
 	for table in sim.layout.tables:
 		check(table.group == null, "mesas libres al final")
 	check(not is_equal_approx(sim.finances.money, money_start), "el dinero ha cambiado")
+
+
+func test_bot_builds_for_every_role() -> void:
+	for role in Bot.Role.values():
+		var bot := Bot.new()
+		bot.setup(role, 5)
+		check(bot.get_child_count() > 0, "el personaje %d tiene piezas" % role)
+		bot.free()
+	var textures: Dictionary = Bot.resources()["eye_textures"]
+	for kind in Bot.Eyes.values():
+		var img: Image = textures[kind].get_image()
+		var lit := 0
+		for x in range(0, img.get_width(), 2):
+			for y in range(0, img.get_height(), 2):
+				if img.get_pixel(x, y).a > 0.5:
+					lit += 1
+		check(lit > 10, "la expresión de ojos %d se dibuja" % kind)

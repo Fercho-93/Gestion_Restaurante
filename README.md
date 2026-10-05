@@ -21,7 +21,7 @@ En el móvil, gíralo en horizontal.
 Controles provisionales: arrastrar para mover la cámara, rueda/pellizco para zoom,
 tocar una persona o una baldosa para ver detalles, barra espaciadora para pausar.
 
-![Servicio de comidas](docs/captura_fase1_servicio.png)
+![Servicio de comidas](docs/captura_3d_servicio.png)
 
 ## Pruebas
 

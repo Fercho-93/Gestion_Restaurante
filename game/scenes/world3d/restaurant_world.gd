@@ -1,0 +1,275 @@
+extends Node3D
+## Restaurante en 3D: suelo, paredes y muebles, y un Bot por cada cliente y empleado de
+## la simulación, colocado donde la simulación dice. Además, el gestor (el jugador).
+## Una celda de la rejilla (x, y) mide 1 x 1 y está en el punto 3D (x, 0, y).
+
+## Estado del grupo -> texto del bocadillo (su color indica el ánimo).
+const BUBBLES := {
+	CustomerGroup.State.EN_COLA: "...",
+	CustomerGroup.State.ESPERANDO_PEDIR: "?",
+	CustomerGroup.State.ESPERANDO_COMIDA: "...",
+	CustomerGroup.State.ESPERANDO_CUENTA: "€",
+}
+const STREET_COLOR := Color("9aa3a8")
+const WALL_COLOR := Color("f3e6d3")
+const WOOD := Color("a0673a")
+const GESTOR_SPOT := Vector2(6.6, 7.2)
+## Hacia dónde se mira para "mirar a la cámara".
+const TOWARDS_CAMERA := Vector3(1, 0, 1)
+
+var sim: RestaurantSim
+## clave -> Bot
+var _bots := {}
+var _gestor: Bot
+var _wave_left := 0.0
+var _last_group_id := 0
+var _selection: MeshInstance3D
+
+
+func setup(restaurant_sim: RestaurantSim) -> void:
+	sim = restaurant_sim
+	_build_floor()
+	_build_walls()
+	_build_furniture()
+	_gestor = Bot.new()
+	_gestor.setup(Bot.Role.GESTOR, 0)
+	add_child(_gestor)
+	_gestor.position = to_world(GESTOR_SPOT)
+	_gestor.face_direction(TOWARDS_CAMERA)
+
+
+static func to_world(p: Vector2, y: float = 0.0) -> Vector3:
+	return Vector3(p.x, y, p.y)
+
+
+func select(cell: Vector2i) -> void:
+	_selection.visible = sim.layout.region.has_point(cell)
+	_selection.position = Vector3(cell.x, 0.01, cell.y)
+
+
+## Personaje más cercano a un punto de la pantalla (o null).
+func person_at(camera: Camera3D, screen_pos: Vector2) -> Bot:
+	var radius := 0.5 * get_viewport().get_visible_rect().size.y / camera.size
+	var best: Bot = null
+	var best_d := radius
+	for bot in _bots.values() + [_gestor]:
+		var p := camera.unproject_position(bot.global_position + Vector3(0, 0.4, 0) * bot.scale.y)
+		var d := p.distance_to(screen_pos)
+		if d < best_d:
+			best = bot
+			best_d = d
+	return best
+
+
+func _process(delta: float) -> void:
+	if sim == null:
+		return
+	var seen := {}
+	for g in sim.groups:
+		for i in g.members.size():
+			var key := "g%d_%d" % [g.id, i]
+			seen[key] = true
+			_sync_customer(_bot(key, Bot.Role.CLIENTE, g.id * 7 + i), g, i)
+	for s in sim.staff:
+		var key := "s%d" % s.id
+		seen[key] = true
+		var role := Bot.Role.COCINERO if s.puesto == StaffMember.ROLE_COOK else Bot.Role.CAMARERO
+		_sync_staff(_bot(key, role, s.id * 3 + 1), s)
+	for key in _bots.keys():
+		if not seen.has(key):
+			_bots[key].queue_free()
+			_bots.erase(key)
+	_update_gestor(delta)
+
+
+func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
+	var m := g.members[member_index]
+	var moving := m.is_moving()
+	var seated := not moving and g.table != null and g.state != CustomerGroup.State.YENDO_A_MESA
+	bot.entity = g
+	bot.position = to_world(m.pos if seated else m.pos + m.jitter)
+	bot.pose = Bot.Pose.SENTADO if seated else (Bot.Pose.ANDANDO if moving else Bot.Pose.DE_PIE)
+	bot.eating = seated and g.state == CustomerGroup.State.COMIENDO
+	if seated:
+		bot.face_direction(to_world(Vector2(g.table.cell)) - bot.position)
+	elif moving:
+		bot.face_direction(to_world(m.facing))
+	var mood := g.mood()
+	if g.left_angry or mood < 0.35:
+		bot.eyes = Bot.Eyes.ENFADADO
+	elif mood < 0.65:
+		bot.eyes = Bot.Eyes.NORMAL
+	else:
+		bot.eyes = Bot.Eyes.FELIZ
+	if member_index != 0:
+		return
+	if g.state == CustomerGroup.State.SALIENDO and g.left_angry:
+		bot.set_bubble("!", Color("d9433b"))
+	elif BUBBLES.has(g.state):
+		var color := Color("d9433b").lerp(Color("e0b43b"), mood * 2.0) if mood < 0.5 \
+				else Color("e0b43b").lerp(Color("4caf50"), (mood - 0.5) * 2.0)
+		bot.set_bubble(BUBBLES[g.state], color)
+	else:
+		bot.set_bubble("")
+
+
+func _sync_staff(bot: Bot, s: StaffMember) -> void:
+	var moving := s.mover.is_moving()
+	bot.entity = s
+	bot.position = to_world(s.mover.pos)
+	bot.carrying = s.is_carrying_food()
+	bot.eyes = Bot.Eyes.FELIZ
+	var phase: String = s.task.get("fase", "")
+	var busy := not s.tickets.is_empty() or phase == "atender" or phase == "recoger"
+	bot.pose = Bot.Pose.ANDANDO if moving else (Bot.Pose.TRABAJANDO if busy else Bot.Pose.DE_PIE)
+	if moving:
+		bot.face_direction(to_world(s.mover.facing))
+	elif s.puesto == StaffMember.ROLE_COOK:
+		bot.face_direction(Vector3(1, 0, 0))
+	elif phase == "atender" and s.task["grupo"].table != null:
+		bot.face_direction(to_world(Vector2(s.task["grupo"].table.cell)) - bot.position)
+	elif phase == "recoger":
+		bot.face_direction(Vector3(1, 0, 0))
+	else:
+		bot.face_direction(TOWARDS_CAMERA)
+
+
+## El gestor saluda cada vez que llega un grupo nuevo.
+func _update_gestor(delta: float) -> void:
+	var newest := 0
+	for g in sim.groups:
+		newest = maxi(newest, g.id)
+	if newest > _last_group_id:
+		_wave_left = 2.0
+	_last_group_id = maxi(_last_group_id, newest)
+	_wave_left -= delta * maxf(1.0, Game.clock.speed)
+	_gestor.waving = _wave_left > 0.0
+	_gestor.eyes = Bot.Eyes.FELIZ
+
+
+func _bot(key: String, role: Bot.Role, seed_value: int) -> Bot:
+	if not _bots.has(key):
+		var bot := Bot.new()
+		bot.setup(role, seed_value)
+		add_child(bot)
+		_bots[key] = bot
+	return _bots[key]
+
+
+# --- Escenario -------------------------------------------------------------
+
+func _build_floor() -> void:
+	var r := sim.layout.region
+	var tile := BoxMesh.new()
+	tile.size = Vector3(0.98, 0.1, 0.98)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = tile
+	mm.instance_count = r.size.x * r.size.y
+	var i := 0
+	for x in range(r.position.x, r.end.x):
+		for y in range(r.position.y, r.end.y):
+			var cell := Vector2i(x, y)
+			var height := -0.1 if x < 0 else -0.05
+			mm.set_instance_transform(i, Transform3D(Basis(), Vector3(x, height, y)))
+			var color := _cell_color(cell)
+			if (x + y) % 2 == 0:
+				color = color.darkened(0.06)
+			mm.set_instance_color(i, color)
+			i += 1
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.vertex_color_use_as_albedo = true
+	floor_mat.roughness = 0.85
+	var floor_node := MultiMeshInstance3D.new()
+	floor_node.multimesh = mm
+	floor_node.material_override = floor_mat
+	add_child(floor_node)
+
+	_selection = MeshInstance3D.new()
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(0.98, 0.98)
+	_selection.mesh = plane
+	var sel_mat := StandardMaterial3D.new()
+	sel_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sel_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sel_mat.albedo_color = Color(1, 1, 1, 0.45)
+	_selection.material_override = sel_mat
+	_selection.visible = false
+	add_child(_selection)
+
+
+func _build_walls() -> void:
+	var w := float(sim.layout.size.x)
+	# Pared del fondo con ventanas y el cartel del restaurante.
+	_box(Vector3(w, 1.5, 0.2), Vector3(w / 2.0 - 0.5, 0.75, -0.6), WALL_COLOR)
+	for x in [1.0, 4.0, 9.5]:
+		_box(Vector3(1.4, 0.6, 0.05), Vector3(x, 0.9, -0.48), Color("bcd8ec"))
+	var sign_label := Label3D.new()
+	sign_label.text = "MI RESTAURANTE"
+	sign_label.font_size = 96
+	sign_label.outline_size = 0
+	sign_label.pixel_size = 0.004
+	sign_label.modulate = Color("a0673a")
+	sign_label.position = Vector3(6.6, 1.25, -0.48)
+	add_child(sign_label)
+
+
+func _build_furniture() -> void:
+	var layout := sim.layout
+	for table in layout.tables:
+		var c := Vector3(table.cell.x, 0, table.cell.y)
+		_box(Vector3(0.7, 0.06, 0.7), c + Vector3(0, 0.42, 0), WOOD)
+		_box(Vector3(0.56, 0.01, 0.56), c + Vector3(0, 0.455, 0), Color("f4efe6"))
+		_box(Vector3(0.1, 0.4, 0.1), c + Vector3(0, 0.2, 0), WOOD.darkened(0.3))
+		for seat in table.seats:
+			var s := Vector3(seat.x, 0, seat.y)
+			var away := (s - c).normalized()
+			_box(Vector3(0.36, 0.16, 0.36), s + Vector3(0, 0.08, 0), WOOD.darkened(0.25))
+			var back_size := Vector3(0.05, 0.36, 0.36) if absf(away.x) > 0.5 else Vector3(0.36, 0.36, 0.05)
+			_box(back_size, s + away * 0.17 + Vector3(0, 0.34, 0), WOOD.darkened(0.25))
+	for cell in layout.counter_cells:
+		var p := Vector3(cell.x, 0, cell.y)
+		_box(Vector3(0.98, 0.8, 0.98), p + Vector3(0, 0.4, 0), Color("c7ccd1"))
+		_box(Vector3(1.0, 0.05, 1.0), p + Vector3(0, 0.82, 0), Color("e6e9ec"))
+	for cell in layout.cook_stations:
+		var p := Vector3(cell.x + 1, 0, cell.y)
+		_box(Vector3(0.9, 0.75, 0.9), p + Vector3(0, 0.375, 0), Color("3d4248"))
+		for dz in [-0.2, 0.2]:
+			var burner := _box(Vector3(0.24, 0.02, 0.24), p + Vector3(0, 0.76, dz), Color("e2553b"))
+			var mat := burner.material_override as StandardMaterial3D
+			mat.emission_enabled = true
+			mat.emission = Color("e2553b")
+	for zone in layout.zones:
+		if not zone["bloqueada"]:
+			continue
+		var rect: Rect2i = zone["rect"]
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				if (x + y) % 2 == 0:
+					_box(Vector3(0.7, 0.5, 0.7), Vector3(x, 0.25, y), Color("c49a6c"))
+				else:
+					_box(Vector3(0.45, 0.3, 0.45), Vector3(x, 0.15, y), Color("b5885a"))
+
+
+func _box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	m.mesh = mesh
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.7
+	m.material_override = mat
+	m.position = pos
+	add_child(m)
+	return m
+
+
+func _cell_color(cell: Vector2i) -> Color:
+	if cell.x < 0:
+		return STREET_COLOR
+	for zone in sim.layout.zones:
+		if zone["rect"].has_point(cell):
+			return zone["color"]
+	return Color("dddddd")

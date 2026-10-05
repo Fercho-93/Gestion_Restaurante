@@ -11,7 +11,7 @@
 |---|---|
 | Plataformas | Android e iOS |
 | Motor | Godot 4.5 (GDScript), renderer *GL Compatibility* (máxima compatibilidad móvil) |
-| Vista | Isométrica 2D |
+| Vista | Isométrica en 3D (cámara ortográfica) |
 | Orientación | Horizontal (landscape) |
 | Tiempo | Tiempo real continuo estilo *Los Sims*: pausa, x1, x2, x4 |
 | Gestor (protagonista) | Personaje propio, animado (pendiente de diseño) |
@@ -159,15 +159,23 @@ Cada evento: condiciones de aparición, probabilidad, efecto y opciones de respu
 
 ## 6. Arte y sonido
 
-- Estilo isométrico 2D, colores cálidos y alegres, personajes *chibi*/caricaturescos.
-- Tamaño de baldosa: **128 × 64 px** (proporción 2:1).
-- Personajes animados por esqueleto 2D (Skeleton2D) o *sprite sheets*; 4 direcciones
-  isométricas mínimo.
-- **El gestor**: personaje protagonista, aparece en el local y en los menús
-  (da consejos, reacciona a lo que pasa). Pendiente: diseño definitivo.
-- Música ambiente distinta para planificación y servicio; efectos de cocina y sala.
+![Personaje de referencia](arte/personaje_referencia.png)
 
----
+- **Mundo 3D con cámara isométrica ortográfica** (se ve en diagonal, como un juego
+  isométrico clásico, pero con volumen, luces y sombras reales). 1 celda = 1 metro.
+- **Personajes**: todos siguen el estilo del gestor (imagen de arriba): cuerpo blanco
+  redondeado tipo "judía", visor negro con ojos luminosos, manos y pies ovalados, sin
+  boca. Aspecto de vinilo mate, colores suaves.
+  - El **gestor** es el protagonista: blanco puro, algo más grande, saluda a los clientes.
+  - **Variantes por puesto**: cocinero (gorro y pañuelo), camarero (pajarita y delantal);
+    clientes con tono pastel y complementos (gorra, lazo, bufanda).
+  - **Expresiones con los ojos**: feliz (^ ^), normal, enfadado y parpadeo. Reflejan el
+    ánimo del cliente.
+  - Animaciones por código: andar con balanceo, sentarse, comer, cocinar, llevar platos,
+    saludar.
+  - Pendiente: versiones masculinas y femeninas, más ropa y peinados; sustituir las formas
+    básicas por modelos 3D definitivos (Blender) manteniendo el mismo estilo.
+- Música ambiente distinta para planificación y servicio; efectos de cocina y sala.
 
 ## 7. Interfaz (móvil)
 

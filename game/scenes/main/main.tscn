@@ -1,24 +1,33 @@
 [gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/main/main.gd" id="1_main"]
-[ext_resource type="Script" path="res://scenes/world/iso_floor.gd" id="2_floor"]
-[ext_resource type="Script" path="res://scenes/world/touch_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://scenes/world3d/restaurant_world.gd" id="2_world"]
+[ext_resource type="Script" path="res://scenes/world3d/iso_camera.gd" id="3_camera"]
 [ext_resource type="PackedScene" path="res://ui/hud.tscn" id="4_hud"]
-[ext_resource type="Script" path="res://scenes/world/restaurant_view.gd" id="5_view"]
 
-[node name="Main" type="Node2D"]
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0.66, 0.75, 0.88, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.86, 0.89, 0.96, 1)
+ambient_light_energy = 0.35
+
+[node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
-[node name="World" type="Node2D" parent="."]
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
 
-[node name="IsoFloor" type="Node2D" parent="World"]
-script = ExtResource("2_floor")
+[node name="Sun" type="DirectionalLight3D" parent="."]
+light_color = Color(1, 0.96, 0.9, 1)
+light_energy = 0.75
+shadow_enabled = true
+directional_shadow_max_distance = 40.0
 
-[node name="RestaurantView" type="Node2D" parent="World"]
-y_sort_enabled = true
-script = ExtResource("5_view")
+[node name="World" type="Node3D" parent="."]
+script = ExtResource("2_world")
 
-[node name="Camera" type="Camera2D" parent="."]
+[node name="Camera" type="Camera3D" parent="."]
 script = ExtResource("3_camera")
 
 [node name="HUD" parent="." instance=ExtResource("4_hud")]
