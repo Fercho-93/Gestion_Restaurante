@@ -1,0 +1,37 @@
+[
+	{
+		"id": "ensalada_mixta", "nombre": "Ensalada mixta", "tipo_cocina": "mediterranea",
+		"ingredientes": { "lechuga": 0.5, "tomate": 0.15, "cebolla": 0.05, "huevo": 1, "aceite_oliva": 0.02 },
+		"tiempo_prep_min": 5, "dificultad": 1, "precio_sugerido": 8.5
+	},
+	{
+		"id": "tortilla_patatas", "nombre": "Tortilla de patatas", "tipo_cocina": "mediterranea",
+		"ingredientes": { "patata": 0.25, "huevo": 3, "cebolla": 0.05, "aceite_oliva": 0.05 },
+		"tiempo_prep_min": 15, "dificultad": 2, "precio_sugerido": 9.0
+	},
+	{
+		"id": "paella_marisco", "nombre": "Paella de marisco", "tipo_cocina": "mediterranea",
+		"ingredientes": { "arroz": 0.1, "gambas": 0.12, "tomate": 0.05, "aceite_oliva": 0.03 },
+		"tiempo_prep_min": 30, "dificultad": 4, "precio_sugerido": 17.0
+	},
+	{
+		"id": "pollo_asado", "nombre": "Pollo asado con patatas", "tipo_cocina": "mediterranea",
+		"ingredientes": { "pollo": 0.4, "patata": 0.2, "aceite_oliva": 0.03 },
+		"tiempo_prep_min": 25, "dificultad": 2, "precio_sugerido": 13.5
+	},
+	{
+		"id": "entrecot", "nombre": "Entrecot a la brasa", "tipo_cocina": "mediterranea",
+		"ingredientes": { "ternera": 0.3, "patata": 0.2, "aceite_oliva": 0.02 },
+		"tiempo_prep_min": 15, "dificultad": 3, "precio_sugerido": 22.0
+	},
+	{
+		"id": "macarrones_queso", "nombre": "Macarrones gratinados", "tipo_cocina": "italiana",
+		"ingredientes": { "pasta": 0.12, "tomate": 0.1, "queso": 0.05, "cebolla": 0.03 },
+		"tiempo_prep_min": 15, "dificultad": 1, "precio_sugerido": 10.0
+	},
+	{
+		"id": "flan", "nombre": "Flan casero", "tipo_cocina": "mediterranea",
+		"ingredientes": { "huevo": 2, "leche": 0.2 },
+		"tiempo_prep_min": 2, "dificultad": 1, "precio_sugerido": 4.5
+	}
+]

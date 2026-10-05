@@ -1,0 +1,17 @@
+[
+	{ "id": "tomate", "nombre": "Tomate", "unidad": "kg", "precio_base": 1.8, "caducidad_dias": 7, "almacenaje": "refrigerado" },
+	{ "id": "lechuga", "nombre": "Lechuga", "unidad": "ud", "precio_base": 0.9, "caducidad_dias": 5, "almacenaje": "refrigerado" },
+	{ "id": "cebolla", "nombre": "Cebolla", "unidad": "kg", "precio_base": 1.2, "caducidad_dias": 30, "almacenaje": "seco" },
+	{ "id": "patata", "nombre": "Patata", "unidad": "kg", "precio_base": 0.9, "caducidad_dias": 30, "almacenaje": "seco" },
+	{ "id": "huevo", "nombre": "Huevo", "unidad": "ud", "precio_base": 0.25, "caducidad_dias": 21, "almacenaje": "refrigerado" },
+	{ "id": "aceite_oliva", "nombre": "Aceite de oliva", "unidad": "l", "precio_base": 8.5, "caducidad_dias": 365, "almacenaje": "seco" },
+	{ "id": "pasta", "nombre": "Pasta seca", "unidad": "kg", "precio_base": 2.0, "caducidad_dias": 365, "almacenaje": "seco" },
+	{ "id": "arroz", "nombre": "Arroz bomba", "unidad": "kg", "precio_base": 3.5, "caducidad_dias": 365, "almacenaje": "seco" },
+	{ "id": "pollo", "nombre": "Pollo", "unidad": "kg", "precio_base": 6.5, "caducidad_dias": 3, "almacenaje": "refrigerado" },
+	{ "id": "ternera", "nombre": "Ternera", "unidad": "kg", "precio_base": 14.0, "caducidad_dias": 4, "almacenaje": "refrigerado" },
+	{ "id": "gambas", "nombre": "Gambas", "unidad": "kg", "precio_base": 18.0, "caducidad_dias": 2, "almacenaje": "refrigerado" },
+	{ "id": "queso", "nombre": "Queso", "unidad": "kg", "precio_base": 12.0, "caducidad_dias": 20, "almacenaje": "refrigerado" },
+	{ "id": "pan", "nombre": "Pan", "unidad": "ud", "precio_base": 0.6, "caducidad_dias": 1, "almacenaje": "seco" },
+	{ "id": "harina", "nombre": "Harina", "unidad": "kg", "precio_base": 0.8, "caducidad_dias": 180, "almacenaje": "seco" },
+	{ "id": "leche", "nombre": "Leche", "unidad": "l", "precio_base": 1.0, "caducidad_dias": 10, "almacenaje": "refrigerado" }
+]
