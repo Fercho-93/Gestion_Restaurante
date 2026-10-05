@@ -7,6 +7,7 @@ extends CanvasLayer
 @onready var info_label: Label = %InfoLabel
 @onready var stats_label: Label = %StatsLabel
 @onready var day_report: DayReport = %DayReport
+@onready var rotate_hint: Control = %RotateHint
 @onready var speed_buttons := {
 	0: %PauseButton,
 	1: %Speed1Button,
@@ -25,10 +26,13 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# En el navegador del móvil no se puede forzar la horizontal: avisamos.
+	var window := get_viewport().get_visible_rect().size
+	rotate_hint.visible = window.x < window.y
 	var sim := Game.sim
 	time_label.text = Game.clock.get_time_text()
 	money_label.text = "%s €" % format_money(sim.finances.money)
-	rating_label.text = "%.1f ★" % sim.average_stars()
+	rating_label.text = "Reputación %.1f/5" % sim.average_stars()
 	var status := "Abierto" if sim.is_open_for_new_customers() else "Cerrado"
 	stats_label.text = "%s · En sala: %d · Atendidos hoy: %d · Perdidos: %d · En cocina: %d platos" % [
 		status, sim.customers_inside(), sim.day_stats["clientes_servidos"],

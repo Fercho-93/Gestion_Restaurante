@@ -53,7 +53,7 @@ func show_report(r: Dictionary) -> void:
 		for reason in r["motivos_perdida"]:
 			reasons.append("%s: %d" % [reason, r["motivos_perdida"][reason]])
 		_line("Grupos perdidos: %d  (%s)" % [lost, ", ".join(reasons)], 24, Color("e57373"))
-	_line("Satisfacción media: %d/100 · Reputación: %.1f ★" % [roundi(r["satisfaccion_media"]), r["reputacion"]])
+	_line("Satisfacción media: %d/100 · Reputación: %.1f/5" % [roundi(r["satisfaccion_media"]), r["reputacion"]])
 	if r["platos_tirados"] > 0:
 		_line("Platos tirados: %d" % r["platos_tirados"], 24, Color("e57373"))
 	for k in r["ingresos"]:

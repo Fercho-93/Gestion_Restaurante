@@ -5,7 +5,14 @@ Juego de gestión de restaurantes para móvil (Android e iOS), hecho con **Godot
 - Diseño del juego: [`docs/GDD.md`](docs/GDD.md)
 - Proyecto de Godot: carpeta [`game/`](game/)
 
-## Cómo abrirlo
+## Jugar en el navegador (también en el móvil)
+
+👉 https://fercho-93.github.io/Gestion_Restaurante/
+
+Se actualiza solo con cada cambio en `main` (GitHub Actions → GitHub Pages).
+En el móvil, gíralo en horizontal.
+
+## Cómo abrirlo en Godot
 
 1. Descarga [Godot 4.5](https://godotengine.org/download) (versión estándar, no .NET).
 2. En el gestor de proyectos: **Importar** → selecciona `game/project.godot`.

@@ -1,0 +1,66 @@
+# Cada push a main: pasa las pruebas, exporta el juego a web y lo publica en GitHub Pages.
+name: Publicar en GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.5"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descargar Godot y plantillas web
+        run: |
+          BASE=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          wget -q $BASE/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          mv Godot_v${GODOT_VERSION}-stable_linux.x86_64 godot
+          wget -q $BASE/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          TEMPLATES=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mkdir -p $TEMPLATES
+          unzip -q -j Godot_v${GODOT_VERSION}-stable_export_templates.tpz \
+            'templates/web_nothreads_*' 'templates/version.txt' -d $TEMPLATES
+          rm Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+
+      - name: Importar proyecto
+        run: ./godot --headless --path game --import
+
+      - name: Pruebas
+        run: ./godot --headless --path game -s res://tests/run_tests.gd
+
+      - name: Exportar a web
+        run: |
+          mkdir -p build/web
+          ./godot --headless --path game --export-release "Web" "$GITHUB_WORKSPACE/build/web/index.html"
+          test -f build/web/index.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

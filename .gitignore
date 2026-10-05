@@ -9,3 +9,6 @@ builds/
 *.apk
 *.aab
 *.ipa
+
+# Exportación web local
+build/
