@@ -21,6 +21,14 @@ var task: Dictionary = {}
 var tickets: Array[Dictionary] = []
 ## Está hablando con el gestor (los camareros se paran mientras tanto).
 var talking := false
+## Ánimo de 0 a 100: influye en su rapidez, su trato y la calidad de la cocina.
+var moral := 70.0
+## Hasta qué minuto de juego va "apretado" porque el gestor le ha metido prisa.
+var rushed_until := -1.0
+## Último minuto en que el gestor le felicitó (las felicitaciones seguidas cuentan menos).
+var last_praise := -1000.0
+## Minuto de juego actual (lo actualiza la simulación) para los efectos con duración.
+var now := 0.0
 
 
 func _init(d: Dictionary, staff_id: int, start_cell: Vector2i) -> void:
@@ -35,9 +43,30 @@ func _init(d: Dictionary, staff_id: int, start_cell: Vector2i) -> void:
 	mover = Mover.new(start_cell, Mover.BASE_SPEED * speed_factor())
 
 
-## Multiplicador de rapidez: 0.75 (lento) a 1.25 (rápido).
+## Multiplicador de rapidez: según su velocidad (0.75 a 1.25), su ánimo y si va con prisa.
 func speed_factor() -> float:
-	return lerpf(0.75, 1.25, velocidad / 100.0)
+	var rush := 1.15 if now < rushed_until else 1.0
+	return lerpf(0.75, 1.25, velocidad / 100.0) * lerpf(0.85, 1.1, moral / 100.0) * rush
+
+
+## Trato al cliente según su ánimo: alguien desanimado atiende peor.
+func effective_trato() -> float:
+	return clampf(trato * lerpf(0.75, 1.1, moral / 100.0), 0.0, 100.0)
+
+
+## Habilidad en cocina según su ánimo.
+func effective_skill() -> float:
+	return clampf(habilidad + (moral - 60.0) * 0.15, 0.0, 100.0)
+
+
+func moral_word() -> String:
+	if moral >= 80.0:
+		return "muy contento"
+	if moral >= 60.0:
+		return "contento"
+	if moral >= 40.0:
+		return "regular"
+	return "quemado"
 
 
 ## Cuántos platos puede llevar a la vez un cocinero.

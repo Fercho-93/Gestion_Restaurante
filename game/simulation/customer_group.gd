@@ -62,6 +62,14 @@ var service_scores: Array[float] = []
 var satisfaction := -1.0
 var left_angry := false
 var leave_reason := ""
+## Lo que ha hecho el gestor por ellos (disculpas, invitaciones...): sube el ánimo.
+var mood_bonus := 0.0
+## Minutos extra de paciencia en la espera actual (p. ej. tras disculparse el gestor).
+var patience_bonus := 0.0
+## Conversaciones ya tenidas con el gestor: opción -> true (no se repiten los efectos).
+var talked := {}
+## Euros que se les ha invitado (se descuentan de la cuenta).
+var comp_value := 0.0
 
 
 func set_state(new_state: State) -> void:
@@ -70,13 +78,14 @@ func set_state(new_state: State) -> void:
 		wait_penalty += maxf(0.0, state_time - limit) / limit
 	state = new_state
 	state_time = 0.0
+	patience_bonus = 0.0
 
 
 func patience_limit() -> float:
 	if not PATIENCE.has(state):
 		return INF
 	var extra := food_patience_extra if state == State.ESPERANDO_COMIDA else 0.0
-	return (PATIENCE[state] + extra) * patience_factor
+	return (PATIENCE[state] + extra) * patience_factor + patience_bonus
 
 
 func is_fed_up() -> bool:
@@ -88,7 +97,7 @@ func mood() -> float:
 	var current := 0.0
 	if PATIENCE.has(state):
 		current = maxf(0.0, state_time - patience_limit()) / patience_limit()
-	return clampf(1.0 - 0.5 * (wait_penalty + current), 0.0, 1.0)
+	return clampf(1.0 - 0.5 * (wait_penalty + current) + mood_bonus, 0.0, 1.0)
 
 
 func is_food_ready() -> bool:

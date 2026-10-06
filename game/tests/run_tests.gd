@@ -24,6 +24,7 @@ func _initialize() -> void:
 	test_manager_avoids_obstacles()
 	test_nobody_walks_through_anything()
 	test_manager_talks()
+	test_talk_effects()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -381,8 +382,8 @@ func test_manager_talks() -> void:
 	check(sim.manager.mover.pos.distance_to(waiter.mover.pos) <= Manager.TALK_DISTANCE, "hablan cerca el uno del otro")
 	var opening := Conversation.opening(talks[0], sim)
 	check(opening.length() > 5, "el camarero responde: " + opening)
-	for option in Conversation.options(talks[0]):
-		check(Conversation.reply(talks[0], option["id"], sim) != "", "respuesta a '%s'" % option["texto"])
+	for option in Conversation.options(talks[0], sim):
+		check(Conversation.choose(talks[0], option["id"], sim) != "", "respuesta a '%s'" % option["texto"])
 	sim.stop_manager()
 	check(not waiter.talking, "al terminar, el camarero vuelve al trabajo")
 	# Hablar con clientes en distintos momentos de su visita.
@@ -393,8 +394,9 @@ func test_manager_talks() -> void:
 			var target := { "entity": g, "member": 0 }
 			states_seen[g.state] = true
 			check(Conversation.opening(target, sim) != "", "el cliente siempre dice algo")
-			for option in Conversation.options(target):
-				check(Conversation.reply(target, option["id"], sim) != "", "y siempre responde")
+			for option in Conversation.options(target, sim):
+				if option["id"] in ["que_tal", "mejorar", "precios"]:
+					check(Conversation.choose(target, option["id"], sim) != "", "y siempre responde")
 	check(states_seen.has(CustomerGroup.State.COMIENDO), "se ha probado a hablar con clientes comiendo")
 	# Ir a hablar con un cliente que se mueve.
 	var g: CustomerGroup = null
@@ -450,3 +452,48 @@ func test_tap_detector() -> void:
 	# Y después del pellizco, un toque normal vuelve a funcionar.
 	t.feed(_tap_event(11, Vector2(50, 50), true), slop)
 	check(t.feed(_tap_event(11, Vector2(52, 51), false), slop) == Vector2(52, 51), "tras un pellizco, los toques siguen funcionando")
+
+
+func test_talk_effects() -> void:
+	var sim := RestaurantSim.new(load_data(), 12 * 60, 11)
+	var g := CustomerGroup.new()
+	g.id = 99
+	g.size = 2
+	g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
+	g.state_time = 12.0
+	var target := { "entity": g, "member": 0 }
+	var ids := Conversation.options(target, sim).map(func(o): return o["id"])
+	check(ids.has("disculpa"), "a un cliente que espera se le pueden pedir disculpas")
+	var mood_before := g.mood()
+	var limit_before := g.patience_limit()
+	Conversation.choose(target, "disculpa", sim)
+	check(g.mood() > mood_before and g.patience_limit() > limit_before, "disculparse le calma y le da más paciencia")
+	ids = Conversation.options(target, sim).map(func(o): return o["id"])
+	check(not ids.has("disculpa"), "no se puede disculpar dos veces por lo mismo")
+	# Invitar al postre: cuesta dinero y sube mucho el ánimo y la valoración.
+	g.set_state(CustomerGroup.State.COMIENDO)
+	var money := sim.finances.money
+	var bonus := g.mood_bonus
+	Conversation.choose(target, "invitar", sim)
+	check(is_equal_approx(sim.finances.money, money - Conversation.TREAT_COST), "invitar cuesta dinero")
+	check(g.mood_bonus >= bonus + Conversation.TREAT_MOOD - 0.001, "invitar sube el ánimo")
+	check(Conversation.worst_aspect(g, sim) != "", "el cliente sabe decir qué mejorar")
+	# Empleados: felicitar anima (no tanto si es seguido); meter prisa acelera y desanima.
+	var w := sim.waiters()[0]
+	var target_w := { "entity": w, "member": 0 }
+	var moral := w.moral
+	Conversation.choose(target_w, "felicitar", sim)
+	check(w.moral > moral, "felicitar sube el ánimo")
+	var after_first := w.moral
+	Conversation.choose(target_w, "felicitar", sim)
+	check(w.moral - after_first < after_first - moral, "felicitar seguido cuenta menos")
+	var speed := w.speed_factor()
+	w.now = sim.minutes
+	Conversation.choose(target_w, "prisa", sim)
+	check(w.speed_factor() > speed * 0.95 and w.moral < after_first + 5.0, "meter prisa acelera pero desanima")
+	check(Conversation.choose(target_w, "como_estas", sim).begins_with("Estoy"), "el empleado dice cómo está")
+	# El ánimo influye: un camarero quemado trata peor.
+	w.moral = 20.0
+	var low := w.effective_trato()
+	w.moral = 90.0
+	check(w.effective_trato() > low, "un empleado animado trata mejor")

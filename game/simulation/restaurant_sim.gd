@@ -95,6 +95,7 @@ func update(dt: float) -> void:
 	_update_groups(dt)
 	_update_waiters(dt)
 	_update_cooks(dt)
+	_update_staff_mood(dt)
 	_update_manager(dt)
 	groups = groups.filter(func(g: CustomerGroup): return g.state != CustomerGroup.State.FUERA)
 	if _crossed(previous, minutes, 0):
@@ -520,7 +521,7 @@ func _progress_waiter_task(w: StaffMember, dt: float) -> void:
 		"atender":
 			w.task["tiempo"] -= dt
 			if w.task["tiempo"] <= 0.0:
-				g.service_scores.append(w.trato)
+				g.service_scores.append(w.effective_trato())
 				match w.task["tipo"]:
 					"pedido": _take_order(g)
 					"servir": _serve(g)
@@ -597,6 +598,8 @@ func _charge(g: CustomerGroup) -> void:
 		"limpieza": layout.limpieza,
 		"calidad_precio": Satisfaction.value_for_money(g.bill, g.fair_bill),
 	})
+	# Lo que haya hecho el gestor por ellos (disculpas, invitaciones...) cuenta.
+	g.satisfaction = clampf(g.satisfaction + g.mood_bonus * 40.0, 0.0, 100.0)
 	# Las propinas son del personal, no entran en la caja del restaurante.
 	var tip := g.bill * maxf(0.0, (g.satisfaction - 70.0) / 300.0)
 	finances.earn("ventas", g.bill)
@@ -606,6 +609,19 @@ func _charge(g: CustomerGroup) -> void:
 	day_stats["satisfaccion_total"] += g.satisfaction
 	_update_reputation(g.satisfaction)
 	_leave(g)
+
+
+# --- Ánimo del personal ------------------------------------------------------------
+
+## El trabajo continuo cansa y desanima poco a poco; los ratos tranquilos lo recuperan.
+func _update_staff_mood(dt: float) -> void:
+	for s in staff:
+		s.now = minutes
+		s.mover.speed = Mover.BASE_SPEED * s.speed_factor()
+		if s.is_busy():
+			s.moral = maxf(0.0, s.moral - dt * 0.03)
+		else:
+			s.moral = minf(100.0, s.moral + dt * 0.02)
 
 
 # --- Cocina -----------------------------------------------------------------
@@ -631,7 +647,7 @@ func _finish_dish(cook: StaffMember, ticket: Dictionary) -> void:
 		day_stats["platos_tirados"] += 1
 		return
 	var difficulty := float(recipes[recipe_id]["dificultad"])
-	g.food_quality_sum += clampf(cook.habilidad + 15.0 - difficulty * 5.0 + rng.randf_range(-8.0, 8.0), 0.0, 100.0)
+	g.food_quality_sum += clampf(cook.effective_skill() + 15.0 - difficulty * 5.0 + rng.randf_range(-8.0, 8.0), 0.0, 100.0)
 	g.dishes_ready += 1
 	day_stats["platos"][recipe_id] = day_stats["platos"].get(recipe_id, 0) + 1
 
@@ -648,6 +664,8 @@ func _close_day() -> void:
 	var wages := 0.0
 	for s in staff:
 		wages += s.salario_dia
+		# Una noche de descanso: el ánimo vuelve en parte a lo normal.
+		s.moral = lerpf(s.moral, 70.0, 0.4)
 	finances.spend("personal", wages)
 	for k in fixed_costs:
 		finances.spend(k, float(fixed_costs[k]))
@@ -671,6 +689,7 @@ func _reset_day_stats() -> void:
 		"propinas_personal": 0.0,
 		"platos": {},
 		"platos_tirados": 0,
+		"invitaciones": 0.0,
 	}
 
 

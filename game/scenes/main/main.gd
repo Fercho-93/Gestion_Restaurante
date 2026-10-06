@@ -70,6 +70,6 @@ func _describe(bot: Bot) -> String:
 	if bot.entity is StaffMember:
 		var s: StaffMember = bot.entity
 		var stats := "Trato %d" % s.trato if s.puesto == StaffMember.ROLE_WAITER else "Habilidad %d" % s.habilidad
-		return "%s (%s) · Velocidad %d · %s · %s" % [s.nombre, "sala" if s.puesto == StaffMember.ROLE_WAITER else "cocina",
-				s.velocidad, stats, s.describe_task()]
+		return "%s (%s) · Velocidad %d · %s · Ánimo %d · %s" % [s.nombre, "sala" if s.puesto == StaffMember.ROLE_WAITER else "cocina",
+				s.velocidad, stats, roundi(s.moral), s.describe_task()]
 	return ""

@@ -10,6 +10,7 @@ const CATEGORY_NAMES := {
 	"personal": "Personal",
 	"alquiler": "Alquiler",
 	"suministros": "Suministros",
+	"invitaciones": "Invitaciones de la casa",
 }
 
 var _body: VBoxContainer

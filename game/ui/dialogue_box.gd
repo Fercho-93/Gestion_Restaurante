@@ -8,7 +8,7 @@ signal closed
 var target := {}
 var _name_label: Label
 var _text_label: Label
-var _options: HBoxContainer
+var _options: GridContainer
 
 
 func _ready() -> void:
@@ -33,8 +33,10 @@ func _ready() -> void:
 	_text_label.add_theme_font_size_override("font_size", 34)
 	_text_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(_text_label)
-	_options = HBoxContainer.new()
-	_options.add_theme_constant_override("separation", 16)
+	_options = GridContainer.new()
+	_options.columns = 3
+	_options.add_theme_constant_override("h_separation", 14)
+	_options.add_theme_constant_override("v_separation", 10)
 	column.add_child(_options)
 	hide()
 
@@ -43,17 +45,23 @@ func open(new_target: Dictionary) -> void:
 	target = new_target
 	_name_label.text = Conversation.speaker_name(target)
 	_text_label.text = "«%s»" % Conversation.opening(target, Game.sim)
+	_rebuild_options()
+	show()
+
+
+## Las opciones cambian según la situación (y según lo ya hablado).
+func _rebuild_options() -> void:
 	for child in _options.get_children():
+		_options.remove_child(child)
 		child.queue_free()
-	for option in Conversation.options(target):
+	for option in Conversation.options(target, Game.sim):
 		var b := Button.new()
 		b.text = option["texto"]
-		b.custom_minimum_size = Vector2(0, 80)
+		b.custom_minimum_size = Vector2(380, 72)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		b.add_theme_font_size_override("font_size", 30)
+		b.add_theme_font_size_override("font_size", 26)
 		b.pressed.connect(_choose.bind(option["id"]))
 		_options.add_child(b)
-	show()
 
 
 func close() -> void:
@@ -64,12 +72,12 @@ func close() -> void:
 
 
 func _choose(option_id: String) -> void:
-	var answer := Conversation.reply(target, option_id, Game.sim)
+	var answer := Conversation.choose(target, option_id, Game.sim)
+	_text_label.text = "«%s»" % answer
 	if option_id == "adios":
-		_text_label.text = "«%s»" % answer
 		# Se despide y el cuadro se cierra solo al momento.
 		for b in _options.get_children():
 			b.disabled = true
 		get_tree().create_timer(1.2).timeout.connect(close)
 		return
-	_text_label.text = "«%s»" % answer
+	_rebuild_options()
