@@ -44,7 +44,8 @@ gestión es **profunda y realista**, pero siempre **intuitiva**.
 - Según crece el negocio puede **delegar**: contratar un encargado de compras, un
   jefe de sala o un jefe de cocina que hagan solos parte de las gestiones (con su
   habilidad y sus errores).
-- Las órdenes se pueden dar también en pausa (se ponen en cola, como en *Los Sims*).
+- Las órdenes se pueden dar también en pausa: se ejecutan al reanudar el tiempo.
+- Puede **ponerse a trabajar** cubriendo un puesto para ahorrar un sueldo.
 
 ### Evolución orgánica (sin objetivos)
 
@@ -174,6 +175,21 @@ Bucle largo: local pequeño → reputación → reformas → segundo local → c
 - Variables: materia prima, mermas, reparaciones.
 - IVA e impuesto de sociedades simplificados. Préstamos con interés.
 
+#### Dificultades económicas y bancarrota (realista y gradual)
+Cerrar definitivamente es el final de un largo camino, con margen para reaccionar:
+1. **Pérdidas**: los informes avisan y explican el porqué (ventas, costes, mermas…).
+2. **Medidas del gestor**: comprar menos materia prima o más barata, cambiar a una carta
+   más económica, recortar personal (con indemnización) y **ponerse él mismo a trabajar**
+   cubriendo un puesto (camarero, cocina) para ahorrar un sueldo.
+3. **Financiación**: préstamos del banco con interés y cuotas; el límite depende de la
+   solvencia y del historial del restaurante.
+4. **Impagos**: si no llega el dinero, los proveedores dejan de servir a crédito, los
+   empleados sin nómina se marchan y las deudas crecen.
+5. **Cierre temporal**: se puede cerrar el local unos días para cortar gastos, a costa de
+   perder clientela y reputación.
+6. **Bancarrota**: si el endeudamiento pasa el límite y no hay forma de pagar, se declara
+   la bancarrota y termina la partida.
+
 ### 5.10 Eventos y problemas
 Ejemplos: inspección de sanidad, avería del horno o de la cámara, proveedor que no
 entrega, empleado enfermo, intoxicación, visita de un crítico, ola de calor,
@@ -271,11 +287,15 @@ Hecho (hito 0):
 - Satisfacción (apartado 5.7), propinas, reputación que atrae más o menos clientes.
 - Informe de cierre del día. Vista 3D isométrica con personajes al estilo del gestor.
 
-Siguiente: hito 1, empezando por el gestor controlable y el despacho.
+Hito 1 en curso:
+- ✅ Gestor controlable: tocar el suelo para que vaya andando, tocar el ordenador para
+  usarlo; las órdenes dadas en pausa se ejecutan al reanudar.
+- ✅ Despacho con ordenador; al sentarse se abre la gestión (Resumen en directo; Carta,
+  Personal, Pedidos y Finanzas por hacer).
+- Siguiente: Carta y precios.
 
 ## 11. Pendiente de decidir
 
-- Qué pasa si te arruinas (¿cierre y empezar de nuevo, o préstamos/rescate hasta un límite?).
 - Monetización (más adelante).
 - Nombre del juego y del personaje gestor.
 - Moneda y país de ambientación (¿euros/España por defecto?).

@@ -10,7 +10,11 @@
 		"zonas": [
 			{ "nombre": "Comedor", "rect": [0, 0, 8, 10], "color": "e9c79a" },
 			{ "nombre": "Cocina", "rect": [8, 0, 4, 6], "color": "b9d4d8" },
-			{ "nombre": "Almacén", "rect": [8, 6, 4, 4], "color": "c9c0b4", "bloqueada": true }
+			{ "nombre": "Almacén", "rect": [8, 6, 4, 2], "color": "c9c0b4", "bloqueada": true },
+			{ "nombre": "Despacho", "rect": [8, 8, 4, 2], "color": "d9bf9b" }
+		],
+		"objetos": [
+			{ "id": "ordenador", "nombre": "Ordenador", "celda": [10, 9], "uso": [9, 9] }
 		],
 		"mesas": [
 			{ "celda": [2, 2], "plazas": 4 },
@@ -23,6 +27,7 @@
 		"barra_cocina": [[8, 0], [8, 1], [8, 3], [8, 4], [8, 5], [8, 2]],
 		"pase": [7, 2],
 		"puesto_camareros": [7, 4],
+		"puesto_gestor": [6, 7],
 		"puestos_cocina": [[9, 1], [9, 4]],
 		"aparicion": [-2, 9],
 		"cola": [[-1, 8], [-1, 7], [-1, 6], [-1, 5], [-1, 4], [-1, 3]]

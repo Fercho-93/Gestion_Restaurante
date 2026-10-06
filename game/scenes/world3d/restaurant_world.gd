@@ -13,7 +13,6 @@ const BUBBLES := {
 const STREET_COLOR := Color("9aa3a8")
 const WALL_COLOR := Color("f3e6d3")
 const WOOD := Color("a0673a")
-const GESTOR_SPOT := Vector2(6.6, 7.2)
 ## Hacia dónde se mira para "mirar a la cámara".
 const TOWARDS_CAMERA := Vector3(1, 0, 1)
 
@@ -33,8 +32,8 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	_build_furniture()
 	_gestor = Bot.new()
 	_gestor.setup(Bot.Role.GESTOR, 0)
+	_gestor.entity = sim.manager
 	add_child(_gestor)
-	_gestor.position = to_world(GESTOR_SPOT)
 	_gestor.face_direction(TOWARDS_CAMERA)
 
 
@@ -42,9 +41,18 @@ static func to_world(p: Vector2, y: float = 0.0) -> Vector3:
 	return Vector3(p.x, y, p.y)
 
 
-func select(cell: Vector2i) -> void:
-	_selection.visible = sim.layout.region.has_point(cell)
-	_selection.position = Vector3(cell.x, 0.01, cell.y)
+## Objeto del local (id) más cercano a un punto de la pantalla, o "".
+func object_at(camera: Camera3D, screen_pos: Vector2) -> String:
+	var radius := 0.7 * get_viewport().get_visible_rect().size.y / camera.size
+	var best := ""
+	var best_d := radius
+	for id in sim.layout.objects:
+		var cell: Vector2i = sim.layout.objects[id]["celda"]
+		var d := camera.unproject_position(Vector3(cell.x, 0.6, cell.y)).distance_to(screen_pos)
+		if d < best_d:
+			best = id
+			best_d = d
+	return best
 
 
 ## Personaje más cercano a un punto de la pantalla (o null).
@@ -80,6 +88,11 @@ func _process(delta: float) -> void:
 			_bots[key].queue_free()
 			_bots.erase(key)
 	_update_gestor(delta)
+	# Marca en el suelo el destino del gestor mientras camina.
+	var path := sim.manager.mover.path
+	_selection.visible = not path.is_empty()
+	if not path.is_empty():
+		_selection.position = Vector3(path.back().x, 0.01, path.back().y)
 
 
 func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
@@ -143,8 +156,19 @@ func _update_gestor(delta: float) -> void:
 		_wave_left = 2.0
 	_last_group_id = maxi(_last_group_id, newest)
 	_wave_left -= delta * maxf(1.0, Game.clock.speed)
-	_gestor.waving = _wave_left > 0.0
+	var m := sim.manager
+	_gestor.position = to_world(m.mover.pos)
 	_gestor.eyes = Bot.Eyes.FELIZ
+	if m.mover.is_moving():
+		_gestor.pose = Bot.Pose.ANDANDO
+		_gestor.face_direction(to_world(m.mover.facing))
+	elif m.state == Manager.State.USANDO:
+		_gestor.pose = Bot.Pose.SENTADO
+		var cell: Vector2i = sim.layout.objects[m.using]["celda"]
+		_gestor.face_direction(to_world(Vector2(cell)) - _gestor.position)
+	else:
+		_gestor.pose = Bot.Pose.DE_PIE
+	_gestor.waving = _wave_left > 0.0 and m.state == Manager.State.LIBRE
 
 
 func _bot(key: String, role: Bot.Role, seed_value: int) -> Bot:
@@ -240,6 +264,7 @@ func _build_furniture() -> void:
 			var mat := burner.material_override as StandardMaterial3D
 			mat.emission_enabled = true
 			mat.emission = Color("e2553b")
+	_build_office()
 	for zone in layout.zones:
 		if not zone["bloqueada"]:
 			continue
@@ -250,6 +275,46 @@ func _build_furniture() -> void:
 					_box(Vector3(0.7, 0.5, 0.7), Vector3(x, 0.25, y), Color("c49a6c"))
 				else:
 					_box(Vector3(0.45, 0.3, 0.45), Vector3(x, 0.15, y), Color("b5885a"))
+
+
+## Despacho: mesa con ordenador, silla del gestor, estantería y planta.
+func _build_office() -> void:
+	var layout := sim.layout
+	if not layout.objects.has("ordenador"):
+		return
+	var pc: Dictionary = layout.objects["ordenador"]
+	var desk := Vector3(pc["celda"].x, 0, pc["celda"].y)
+	var seat := Vector3(pc["uso"].x, 0, pc["uso"].y)
+	var toward := (desk - seat).normalized()
+	var side := Vector3(-toward.z, 0, toward.x)
+	_box(Vector3(0.8, 0.06, 0.8) if absf(toward.x) > 0.5 else Vector3(0.8, 0.06, 0.8), desk + Vector3(0, 0.46, 0), WOOD.lightened(0.15))
+	for corner in [Vector3(-0.33, 0, -0.33), Vector3(0.33, 0, -0.33), Vector3(-0.33, 0, 0.33), Vector3(0.33, 0, 0.33)]:
+		_box(Vector3(0.06, 0.44, 0.06), desk + corner + Vector3(0, 0.22, 0), WOOD.darkened(0.3))
+	# Pantalla mirando a la silla, con brillo.
+	var monitor_pos := desk + toward * 0.12 + Vector3(0, 0.68, 0)
+	var monitor_size := Vector3(0.05, 0.3, 0.46) if absf(toward.x) > 0.5 else Vector3(0.46, 0.3, 0.05)
+	_box(monitor_size, monitor_pos, Color("2a2d34"))
+	var screen := _box(monitor_size * Vector3(0.6, 0.85, 0.9) if absf(toward.x) > 0.5 else monitor_size * Vector3(0.9, 0.85, 0.6), monitor_pos - toward * 0.02, Color("7fc8f0"))
+	var screen_mat := screen.material_override as StandardMaterial3D
+	screen_mat.emission_enabled = true
+	screen_mat.emission = Color("7fc8f0")
+	screen_mat.emission_energy_multiplier = 0.8
+	_box(Vector3(0.08, 0.16, 0.08), desk + toward * 0.12 + Vector3(0, 0.55, 0), Color("2a2d34"))
+	_box(Vector3(0.3, 0.02, 0.12) if absf(toward.x) > 0.5 else Vector3(0.12, 0.02, 0.3), desk - toward * 0.15 + Vector3(0, 0.5, 0), Color("dfe3e8"))
+	# Silla de oficina.
+	_box(Vector3(0.38, 0.06, 0.38), seat + Vector3(0, 0.16, 0), Color("3b4a63"))
+	_box(Vector3(0.06, 0.4, 0.38) if absf(toward.x) > 0.5 else Vector3(0.38, 0.4, 0.06), seat - toward * 0.19 + Vector3(0, 0.36, 0), Color("3b4a63"))
+	# Estantería y planta en las esquinas libres del despacho.
+	for zone in layout.zones:
+		if zone["nombre"] != "Despacho":
+			continue
+		var r: Rect2i = zone["rect"]
+		_box(Vector3(0.9, 1.1, 0.3), Vector3(r.end.x - 1, 0.55, r.position.y - 0.3), Color("8a5a35"))
+		for i in 3:
+			_box(Vector3(0.12, 0.22, 0.2), Vector3(r.end.x - 1.3 + i * 0.2, 0.75, r.position.y - 0.3), Color(["c0504d", "4f81bd", "9bbb59"][i]))
+		var pot := Vector3(r.end.x - 1, 0, r.end.y - 1)
+		_box(Vector3(0.3, 0.3, 0.3), pot + Vector3(0, 0.15, 0), Color("b5651d"))
+		_box(Vector3(0.4, 0.4, 0.4), pot + Vector3(0, 0.5, 0), Color("4f9a4a"))
 
 
 func _box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:

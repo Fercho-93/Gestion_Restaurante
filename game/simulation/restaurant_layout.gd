@@ -34,6 +34,9 @@ var spawn_cell: Vector2i
 var queue_cells: Array[Vector2i] = []
 var pass_cell: Vector2i
 var waiter_home: Vector2i
+var manager_home: Vector2i
+## Objetos que el gestor puede usar: id -> {nombre, celda: Vector2i, uso: Vector2i}
+var objects: Dictionary = {}
 var cook_stations: Array[Vector2i] = []
 var counter_cells: Array[Vector2i] = []
 var ambiente: float
@@ -47,6 +50,9 @@ func _init(d: Dictionary) -> void:
 	spawn_cell = v2i(d["aparicion"])
 	pass_cell = v2i(d["pase"])
 	waiter_home = v2i(d["puesto_camareros"])
+	manager_home = v2i(d["puesto_gestor"])
+	for o in d.get("objetos", []):
+		objects[o["id"]] = { "nombre": o["nombre"], "celda": v2i(o["celda"]), "uso": v2i(o["uso"]) }
 	ambiente = float(d["ambiente"])
 	limpieza = float(d["limpieza"])
 	for c in d["cola"]:
@@ -86,6 +92,8 @@ func _build_navigation() -> void:
 		astar.set_point_solid(c)
 	for table in tables:
 		astar.set_point_solid(table.cell)
+	for o in objects.values():
+		astar.set_point_solid(o["celda"])
 
 
 ## Camino de celdas entre dos puntos (incluye el origen). Vacío si no hay camino.
@@ -97,6 +105,22 @@ func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 
 func is_walkable(cell: Vector2i) -> bool:
 	return region.has_point(cell) and not astar.is_point_solid(cell)
+
+
+## La celda transitable más cercana (la propia si ya lo es).
+func nearest_walkable(cell: Vector2i) -> Vector2i:
+	if is_walkable(cell):
+		return cell
+	var best := cell
+	var best_d := INF
+	for dx in range(-3, 4):
+		for dy in range(-3, 4):
+			var c := cell + Vector2i(dx, dy)
+			var d := Vector2(dx, dy).length()
+			if d < best_d and is_walkable(c):
+				best = c
+				best_d = d
+	return best
 
 
 func zone_name_at(cell: Vector2i) -> String:

@@ -5,6 +5,8 @@ extends RefCounted
 
 signal day_closed(report: Dictionary)
 signal group_left(group: CustomerGroup)
+## El gestor ha llegado a un objeto y empieza a usarlo (p. ej. "ordenador").
+signal manager_started_using(object_id: String)
 
 const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
@@ -20,6 +22,7 @@ var ingredients: Dictionary
 ## receta_id -> precio de venta
 var menu: Dictionary = {}
 var staff: Array[StaffMember] = []
+var manager: Manager
 var groups: Array[CustomerGroup] = []
 ## Platos pendientes de empezar: [{grupo, receta}]
 var kitchen_queue: Array[Dictionary] = []
@@ -68,6 +71,7 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 			cell += Vector2i(0, waiter_count)
 			waiter_count += 1
 		staff.append(StaffMember.new(d, staff.size() + 1, cell))
+	manager = Manager.new(layout.manager_home)
 	minutes = start_minutes
 	_reset_day_stats()
 	_restock()
@@ -82,6 +86,9 @@ func update(dt: float) -> void:
 	_update_groups(dt)
 	_update_waiters(dt)
 	_update_cooks(dt)
+	var used := manager.step(dt)
+	if used != "":
+		manager_started_using.emit(used)
 	groups = groups.filter(func(g: CustomerGroup): return g.state != CustomerGroup.State.FUERA)
 	if _crossed(previous, minutes, 0):
 		_close_day()

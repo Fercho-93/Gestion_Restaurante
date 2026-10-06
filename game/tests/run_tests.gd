@@ -19,6 +19,7 @@ func _initialize() -> void:
 	test_satisfaction_bounds()
 	test_full_day_simulation()
 	test_bot_builds_for_every_role()
+	test_manager_walks_and_uses_computer()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -249,3 +250,36 @@ func test_camera_follows_fingers() -> void:
 	_touch(cam, 0, a, false)
 	_touch(cam, 1, b, false)
 	cam.free()
+
+
+func test_manager_walks_and_uses_computer() -> void:
+	var sim := RestaurantSim.new(load_data(), 9 * 60, 7)
+	var m := sim.manager
+	check(m.mover.cell() == sim.layout.manager_home, "el gestor empieza en su sitio")
+	check(sim.layout.objects.has("ordenador"), "hay un ordenador en el local")
+	check(sim.layout.zone_name_at(sim.layout.objects["ordenador"]["uso"]) == "Despacho", "el ordenador está en el despacho")
+	# Andar a una celda libre.
+	m.walk_to(sim.layout, Vector2i(1, 1))
+	for i in 200:
+		sim.update(0.25)
+	check(m.mover.cell() == Vector2i(1, 1) and m.state == Manager.State.LIBRE, "el gestor llega adonde se le manda")
+	# Mandarlo a una mesa: va a la celda libre más cercana.
+	var table: Vector2i = sim.layout.tables[0].cell
+	m.walk_to(sim.layout, table)
+	for i in 200:
+		sim.update(0.25)
+	check(m.mover.cell() != table and m.mover.cell().distance_to(table) <= 1.5, "si tocas una mesa, se queda al lado")
+	# Usar el ordenador: llega, se sienta y avisa.
+	var used: Array[String] = []
+	sim.manager_started_using.connect(func(id: String): used.append(id))
+	m.go_use(sim.layout, "ordenador")
+	for i in 400:
+		sim.update(0.25)
+	check(used == ["ordenador"], "avisa una sola vez de que usa el ordenador")
+	check(m.state == Manager.State.USANDO and m.mover.cell() == sim.layout.objects["ordenador"]["uso"], "está sentado en el ordenador")
+	m.stop_using()
+	check(m.state == Manager.State.LIBRE and m.using == "", "se levanta del ordenador")
+	# En pausa (sin avanzar la simulación) la orden espera.
+	var before := m.mover.pos
+	m.walk_to(sim.layout, Vector2i(3, 3))
+	check(m.mover.pos == before and m.state == Manager.State.ANDANDO, "en pausa la orden queda pendiente")

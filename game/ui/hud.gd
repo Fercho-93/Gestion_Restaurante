@@ -1,3 +1,4 @@
+class_name HUD
 extends CanvasLayer
 ## HUD: fecha y hora, velocidad, dinero, reputación, estado de la sala e informe diario.
 
@@ -8,6 +9,9 @@ extends CanvasLayer
 @onready var stats_label: Label = %StatsLabel
 @onready var day_report: DayReport = %DayReport
 @onready var rotate_hint: Control = %RotateHint
+@onready var computer: ComputerScreen = %Computer
+@onready var top_bar: Control = $TopBar
+@onready var bottom_bar: Control = $BottomBar
 @onready var speed_buttons := {
 	0: %PauseButton,
 	1: %Speed1Button,
@@ -22,6 +26,10 @@ func _ready() -> void:
 	Game.clock.speed_changed.connect(_on_speed_changed)
 	Game.sim.day_closed.connect(_on_day_closed)
 	day_report.closed.connect(func(): Game.clock.set_speed(1))
+	Game.sim.manager_started_using.connect(_on_manager_started_using)
+	computer.closed.connect(func():
+		Game.sim.manager.stop_using()
+		show_info("Gestor: libre"))
 	_on_speed_changed(Game.clock.speed)
 
 
@@ -41,6 +49,19 @@ func _process(_delta: float) -> void:
 
 func show_info(text: String) -> void:
 	info_label.text = text
+
+
+## ¿Hay interfaz bajo ese punto de la pantalla? (para no mover al gestor al tocar botones)
+func blocks_point(screen_pos: Vector2) -> bool:
+	if computer.visible or day_report.is_visible_in_tree() or rotate_hint.visible:
+		return true
+	return top_bar.get_global_rect().has_point(screen_pos) or bottom_bar.get_global_rect().has_point(screen_pos)
+
+
+func _on_manager_started_using(object_id: String) -> void:
+	if object_id == "ordenador":
+		show_info("Gestor: en el ordenador")
+		computer.open()
 
 
 func _dishes_cooking() -> int:
