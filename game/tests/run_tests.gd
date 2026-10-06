@@ -28,6 +28,7 @@ func _initialize() -> void:
 	test_manager_works_and_cleaning()
 	test_room_life()
 	test_manager_energy()
+	test_manager_helps_arriving_customers()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -362,7 +363,7 @@ func test_nobody_walks_through_anything() -> void:
 	check(on_furniture == 0, "nadie pisa mesas, barra ni muebles (%d veces)" % on_furniture)
 	var served: int = report.get("clientes_servidos", 0)
 	var lost: int = report.get("grupos_perdidos", 0)
-	check(served >= 40 and lost <= 12, "el servicio sigue funcionando con tráfico: %d atendidos, %d grupos perdidos" % [served, lost])
+	check(served >= 30 and lost <= 10, "el servicio sigue funcionando con tráfico: %d atendidos, %d grupos perdidos" % [served, lost])
 	check(sim.forced_passes <= 10, "los cruces forzados son raros: %d" % sim.forced_passes)
 	print("Día con tráfico: %d clientes atendidos, %d perdidos, %d pasos forzados" % [served, report.get("grupos_perdidos", 0), sim.forced_passes])
 	# Nadie se queda atascado: al final del día no queda nadie esperando para siempre.
@@ -464,7 +465,7 @@ func test_talk_effects() -> void:
 	g.id = 99
 	g.size = 2
 	g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
-	g.state_time = 12.0
+	g.state_time = 1.4 * g.patience_limit()
 	var target := { "entity": g, "member": 0 }
 	var ids := Conversation.options(target, sim).map(func(o): return o["id"])
 	check(ids.has("disculpa"), "a un cliente que espera se le pueden pedir disculpas")
@@ -611,7 +612,7 @@ func test_room_life() -> void:
 	# Queja en voz alta: molesta a la mesa de al lado.
 	var angry := _seated_group(sim, 702, 2, 1)
 	angry.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
-	angry.state_time = 15.0
+	angry.state_time = 1.8 * angry.patience_limit()
 	var neighbour := _seated_group(sim, 703, 2, 3)
 	neighbour.set_state(CustomerGroup.State.COMIENDO)
 	var before := neighbour.mood()
@@ -676,7 +677,7 @@ func test_manager_energy() -> void:
 	check(e1 - m.energy > idle_drain, "trabajar cansa más que estar parado")
 	# Agotado: más lento y sin poder trabajar.
 	var fast := m.speed_factor()
-	m.energy = 0.1
+	m.energy = 0.02
 	for i in 20:
 		sim.update(0.1)
 	check(m.exhausted(), "se puede llegar a estar agotado")
@@ -697,3 +698,49 @@ func test_manager_energy() -> void:
 	while sim.minutes < 24 * 60 + 1:
 		sim.update(0.25)
 	check(m.energy >= 99.0, "por la noche recupera toda la energía")
+
+
+## Al tocar a unos clientes recién llegados, el gestor siempre puede ayudarles con la mesa.
+func test_manager_helps_arriving_customers() -> void:
+	var sim := RestaurantSim.new(load_data(), 13 * 60, 31)
+	var g := CustomerGroup.new()
+	g.id = 900
+	g.size = 2
+	for i in 2:
+		g.members.append(Mover.new(sim.layout.spawn_cell))
+	sim.groups.append(g)
+	var target := { "entity": g, "member": 0 }
+	var ids := Conversation.options(target, sim).map(func(o): return o["id"])
+	check(ids.has("acomodar"), "recién llegados (aún andando), el gestor puede acompañarles a una mesa")
+	# Si un camarero ya iba a buscarlos, el gestor le releva.
+	var w := sim.waiters()[0]
+	sim.start_task(w, { "tipo": "acomodar", "grupo": g })
+	ids = Conversation.options(target, sim).map(func(o): return o["id"])
+	check(ids.has("acomodar"), "aunque un camarero fuera a por ellos, el gestor puede encargarse")
+	Conversation.choose(target, "acomodar", sim)
+	check(w.task.is_empty() and g.waiter == sim.manager, "el gestor releva al camarero")
+	for i in 600:
+		sim.update(0.1)
+		if g.state == CustomerGroup.State.ESPERANDO_PEDIR:
+			break
+	check(g.state == CustomerGroup.State.ESPERANDO_PEDIR, "el gestor les sienta en su mesa")
+	# Sin mesas limpias: el gestor puede prepararles una sucia, o al menos tranquilizarles.
+	var g2 := CustomerGroup.new()
+	g2.id = 901
+	g2.size = 2
+	for i in 2:
+		g2.members.append(Mover.new(sim.layout.spawn_cell))
+	sim.groups.append(g2)
+	for t in sim.layout.tables:
+		if t.group == null:
+			t.dirty = true
+	var t2 := { "entity": g2, "member": 0 }
+	ids = Conversation.options(t2, sim).map(func(o): return o["id"])
+	check(ids.has("preparar_mesa"), "si solo hay mesas sucias, el gestor puede preparar una")
+	Conversation.choose(t2, "preparar_mesa", sim)
+	check(sim.manager.task.get("tipo", "") == "recoger_mesa", "el gestor va a recoger la mesa")
+	for t in sim.layout.tables:
+		if t.group == null:
+			t.group = g
+	ids = Conversation.options(t2, sim).map(func(o): return o["id"])
+	check(ids.has("sin_mesa"), "sin ninguna mesa, el gestor puede tranquilizarles")

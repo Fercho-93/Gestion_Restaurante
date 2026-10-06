@@ -28,7 +28,7 @@ const REGULAR_NAMES := ["Don Ramón", "Doña Encarna", "Pepe el del quiosco", "S
 ## Lo que cuesta la tarta de cumpleaños que invita la casa.
 const CAKE_COST := 6.0
 ## Energía del gestor: lo que gasta por minuto según lo que hace, y lo que da un café.
-const ENERGY_DRAIN := { "base": 0.05, "andando": 0.05, "trabajando": 0.09 }
+const ENERGY_DRAIN := { "base": 0.025, "andando": 0.025, "trabajando": 0.045 }
 const COFFEE_MINUTES := 2.0
 const COFFEE_ENERGY := 35.0
 ## Tráfico: si alguien no puede avanzar, cada tanto busca otro camino; si sigue
@@ -576,6 +576,28 @@ func free_table_for(g: CustomerGroup) -> RestaurantLayout.Table:
 	return best
 
 
+## Mesa sucia (sin nadie recogiéndola) donde cabría el grupo, o null.
+func dirty_table_for(g: CustomerGroup) -> RestaurantLayout.Table:
+	for table in layout.tables:
+		if table.group == null and table.dirty and table.cleaner == null and table.capacity() >= g.size:
+			return table
+	return null
+
+
+## ¿Puede el gestor encargarse de este grupo? Sí si nadie les atiende, o si el camarero
+## que va a hacerlo aún no ha empezado (el gestor le releva).
+func manager_can_take_over(g: CustomerGroup) -> bool:
+	if g.waiter == null:
+		return true
+	return g.waiter is StaffMember and g.waiter.task.get("fase", "") != "atender"
+
+
+## El gestor releva al camarero que iba a atender al grupo (que queda libre).
+func order_manager_take_over(g: CustomerGroup) -> void:
+	if g.waiter is StaffMember and manager_can_take_over(g):
+		_end_waiter_task(g.waiter)
+
+
 ## El primer grupo de la cola (el que lleva más esperando).
 func first_in_queue() -> CustomerGroup:
 	for g in groups:
@@ -844,7 +866,7 @@ func _end_waiter_task(w) -> void:
 	if g != null and g.waiter == w:
 		g.waiter = null
 		# Si iba a acompañarles y no llegó a hacerlo, la mesa vuelve a quedar libre.
-		if w.task["tipo"] == "acomodar" and g.state == CustomerGroup.State.EN_COLA and g.table != null:
+		if w.task["tipo"] == "acomodar" and g.state in [CustomerGroup.State.LLEGANDO, CustomerGroup.State.EN_COLA] and g.table != null:
 			g.table.group = null
 			g.table = null
 	var table = w.task.get("mesa")
@@ -954,7 +976,7 @@ func _update_staff_mood(dt: float) -> void:
 		s.now = minutes
 		s.mover.speed = Mover.BASE_SPEED * s.speed_factor()
 		if s.is_busy():
-			s.moral = maxf(0.0, s.moral - dt * 0.03)
+			s.moral = maxf(0.0, s.moral - dt * 0.015)
 		else:
 			s.moral = minf(100.0, s.moral + dt * 0.02)
 

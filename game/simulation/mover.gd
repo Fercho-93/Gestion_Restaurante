@@ -4,7 +4,7 @@ extends RefCounted
 ## Antes de entrar en una casilla pregunta si está libre: así nadie atraviesa a nadie.
 
 ## Velocidad base en celdas por minuto de juego.
-const BASE_SPEED := 4.0
+const BASE_SPEED := 3.0
 
 ## Posición en coordenadas de rejilla (con decimales mientras camina).
 var pos: Vector2

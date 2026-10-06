@@ -324,6 +324,14 @@ Hito 1 en curso:
   trabajando); por debajo de la mitad va más lento y trata peor, y agotado no puede
   trabajar. La cafetera de la barra la recupera y la noche la repone del todo. Se le
   nota en la cara (ojos entornados, "Zzz").
+- ✅ Ritmo más pausado (sin cambiar el reloj): la gente camina un 25 % más despacio, los
+  clientes tienen 1,6 veces más paciencia, llegan un 25 % menos por hora, y el gestor y
+  los empleados se cansan/desaniman la mitad de rápido.
+- ✅ El gestor siempre puede ayudar a los clientes que llegan: acompañarles a una mesa
+  (aunque aún estén llegando o un camarero ya fuera a por ellos: le releva), prepararles
+  una mesa sucia o tranquilizarles si no hay ninguna libre.
+- Pendiente de equilibrar: con el ritmo más pausado se atiende a menos clientes y el día
+  sale con pérdidas; se ajustará con la carta y los precios, sueldos y alquiler.
 - Siguiente: Carta y precios (primer módulo de gestión del ordenador).
 
 ## 11. Pendiente de decidir

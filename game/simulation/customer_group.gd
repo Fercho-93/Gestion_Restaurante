@@ -29,10 +29,10 @@ const STATE_NAMES := {
 ## Minutos que un grupo tolera en cada espera antes de empezar a enfadarse.
 ## Si espera el doble, se marcha.
 const PATIENCE := {
-	State.EN_COLA: 15.0,
-	State.ESPERANDO_PEDIR: 8.0,
-	State.ESPERANDO_COMIDA: 15.0,
-	State.ESPERANDO_CUENTA: 8.0,
+	State.EN_COLA: 24.0,
+	State.ESPERANDO_PEDIR: 13.0,
+	State.ESPERANDO_COMIDA: 24.0,
+	State.ESPERANDO_CUENTA: 13.0,
 }
 
 var id: int

@@ -62,10 +62,17 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 		list.append({ "id": "adios", "texto": "Sigue así" })
 		return list
 	var g: CustomerGroup = e
-	# El gestor puede hacer él mismo el trabajo de un camarero con este grupo.
-	if g.waiter == null:
-		if g.state == CustomerGroup.State.EN_COLA and sim.free_table_for(g) != null:
-			list.append({ "id": "acomodar", "texto": "Acompáñenme, tienen mesa", "trabajo": true })
+	# El gestor puede hacer él mismo el trabajo de un camarero con este grupo (aunque un
+	# camarero ya fuera a hacerlo: entonces se encarga el gestor y el camarero queda libre).
+	if sim.manager_can_take_over(g):
+		var arriving := g.state == CustomerGroup.State.LLEGANDO or g.state == CustomerGroup.State.EN_COLA
+		if arriving:
+			if sim.free_table_for(g) != null:
+				list.append({ "id": "acomodar", "texto": "Acompáñenme, tienen mesa", "trabajo": true })
+			elif sim.dirty_table_for(g) != null:
+				list.append({ "id": "preparar_mesa", "texto": "Les preparo una mesa enseguida", "trabajo": true })
+			elif not g.talked.has("sin_mesa"):
+				list.append({ "id": "sin_mesa", "texto": "En cuanto quede una mesa, les siento" })
 		elif g.state == CustomerGroup.State.ESPERANDO_PEDIR:
 			list.append({ "id": "pedido", "texto": "Les tomo nota yo", "trabajo": true })
 		elif g.is_food_ready():
@@ -158,7 +165,20 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 	if e is StaffMember:
 		return _staff_choice(e, option_id, sim)
 	var g: CustomerGroup = e
+	if option_id == "preparar_mesa":
+		var table := sim.dirty_table_for(g)
+		g.mood_bonus += CHAT_MOOD
+		g.patience_bonus += 4.0
+		sim.order_manager_take_over(g)
+		sim.order_manager_clean_table(table)
+		return "Gracias, esperamos aquí."
+	if option_id == "sin_mesa":
+		g.talked["sin_mesa"] = true
+		g.patience_bonus += APOLOGY_PATIENCE
+		g.mood_bonus += CHAT_MOOD
+		return "De acuerdo, esperamos un poco."
 	if option_id in ["acomodar", "pedido", "servir", "cobrar"]:
+		sim.order_manager_take_over(g)
 		sim.order_manager_task({ "tipo": option_id, "grupo": g })
 		match option_id:
 			"acomodar":
