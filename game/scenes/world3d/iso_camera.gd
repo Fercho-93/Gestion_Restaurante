@@ -1,7 +1,9 @@
 class_name IsoCamera
 extends Camera3D
-## Cámara isométrica ortográfica. Arrastrar con un dedo para mover, pellizcar con dos
-## (o rueda del ratón) para hacer zoom.
+## Cámara isométrica ortográfica, con gestos como un mapa:
+## - Arrastrar con un dedo: el escenario se queda pegado al dedo.
+## - Pellizcar con dos: zoom hacia el punto entre los dedos (y se puede mover a la vez).
+## - Rueda del ratón: zoom hacia el puntero.
 
 const PITCH_DEG := -35.264
 const YAW_DEG := 45.0
@@ -12,9 +14,8 @@ const MAX_SIZE := 16.0
 const BOUNDS := Rect2(-3, -1, 16, 12)
 
 var target := Vector3.ZERO
+## Dedos en pantalla: índice -> posición.
 var _touches := {}
-var _pinch_start_distance := 0.0
-var _pinch_start_size := 1.0
 
 
 func _ready() -> void:
@@ -46,32 +47,39 @@ func _unhandled_input(event: InputEvent) -> void:
 			_touches[event.index] = event.position
 		else:
 			_touches.erase(event.index)
-		if _touches.size() == 2:
-			_pinch_start_distance = _touch_distance()
-			_pinch_start_size = size
 	elif event is InputEventScreenDrag:
+		var before: Dictionary = _touches.duplicate()
+		if not before.has(event.index):
+			before[event.index] = event.position - event.relative
 		_touches[event.index] = event.position
-		if _touches.size() == 1:
-			_pan(event.relative)
-			get_viewport().set_input_as_handled()
-		elif _touches.size() == 2 and _pinch_start_distance > 0.0:
-			size = clampf(_pinch_start_size * _pinch_start_distance / _touch_distance(), MIN_SIZE, MAX_SIZE)
-			get_viewport().set_input_as_handled()
+		var fingers: Array = _touches.keys()
+		if fingers.size() == 1:
+			_move_keeping(before[event.index], event.position, size)
+		elif event.index in fingers.slice(0, 2):
+			var a: int = fingers[0]
+			var b: int = fingers[1]
+			var old_mid: Vector2 = (before[a] + before[b]) / 2.0
+			var new_mid: Vector2 = (_touches[a] + _touches[b]) / 2.0
+			var old_gap: float = before[a].distance_to(before[b])
+			var new_gap: float = _touches[a].distance_to(_touches[b])
+			var new_size := size if new_gap < 1.0 else size * old_gap / new_gap
+			_move_keeping(old_mid, new_mid, new_size)
+		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			size = clampf(size / 1.1, MIN_SIZE, MAX_SIZE)
+			_move_keeping(event.position, event.position, size / 1.1)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			size = clampf(size * 1.1, MIN_SIZE, MAX_SIZE)
+			_move_keeping(event.position, event.position, size * 1.1)
 
 
-func _pan(relative: Vector2) -> void:
-	var units_per_pixel := size / get_viewport().get_visible_rect().size.y
-	var right := global_transform.basis.x
-	right.y = 0.0
-	var forward := -global_transform.basis.z
-	forward.y = 0.0
-	target += right.normalized() * relative.x * units_per_pixel
-	target -= forward.normalized() * relative.y * units_per_pixel / sin(deg_to_rad(-PITCH_DEG))
+## Cambia el zoom y mueve la cámara para que el punto del suelo que estaba bajo
+## `from_screen` quede ahora bajo `to_screen`.
+func _move_keeping(from_screen: Vector2, to_screen: Vector2, new_size: float) -> void:
+	var anchor := screen_to_ground(from_screen)
+	size = clampf(new_size, MIN_SIZE, MAX_SIZE)
+	_apply()
+	target += anchor - screen_to_ground(to_screen)
+	target.y = 0.0
 	target.x = clampf(target.x, BOUNDS.position.x, BOUNDS.end.x)
 	target.z = clampf(target.z, BOUNDS.position.y, BOUNDS.end.y)
 	_apply()
@@ -79,8 +87,3 @@ func _pan(relative: Vector2) -> void:
 
 func _apply() -> void:
 	position = target + global_transform.basis.z * DISTANCE
-
-
-func _touch_distance() -> float:
-	var points: Array = _touches.values()
-	return (points[0] as Vector2).distance_to(points[1])

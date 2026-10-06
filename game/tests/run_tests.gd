@@ -6,7 +6,7 @@ var _failures := 0
 var _checks := 0
 
 
-func _init() -> void:
+func _initialize() -> void:
 	test_clock_starts_at_given_time()
 	test_clock_advances_with_speed()
 	test_clock_pause_and_resume()
@@ -19,6 +19,7 @@ func _init() -> void:
 	test_satisfaction_bounds()
 	test_full_day_simulation()
 	test_bot_builds_for_every_role()
+	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
 
@@ -193,3 +194,58 @@ func test_bot_builds_for_every_role() -> void:
 				if img.get_pixel(x, y).a > 0.5:
 					lit += 1
 		check(lit > 10, "la expresión de ojos %d se dibuja" % kind)
+
+
+func _touch(cam: IsoCamera, index: int, pos: Vector2, pressed: bool) -> void:
+	var e := InputEventScreenTouch.new()
+	e.index = index
+	e.position = pos
+	e.pressed = pressed
+	cam._unhandled_input(e)
+
+
+func _drag(cam: IsoCamera, index: int, from: Vector2, to: Vector2) -> void:
+	var e := InputEventScreenDrag.new()
+	e.index = index
+	e.position = to
+	e.relative = to - from
+	cam._unhandled_input(e)
+
+
+func test_camera_follows_fingers() -> void:
+	var cam := IsoCamera.new()
+	root.add_child.call_deferred(cam)
+	await process_frame
+	cam.focus(Vector3(5, 0, 5))
+	# Un dedo: el punto del suelo bajo el dedo sigue bajo el dedo, en cualquier dirección.
+	var finger := Vector2(900, 500)
+	_touch(cam, 0, finger, true)
+	for step in [Vector2(60, 0), Vector2(0, -60), Vector2(-60, 0), Vector2(0, 60), Vector2(35, -20)]:
+		var grabbed := cam.screen_to_ground(finger)
+		_drag(cam, 0, finger, finger + step)
+		finger += step
+		check(cam.screen_to_ground(finger).distance_to(grabbed) < 0.01, "el suelo sigue al dedo (%s)" % step)
+	_touch(cam, 0, finger, false)
+	# Arrastrar hacia arriba sube el escenario: la cámara pasa a mirar más abajo en pantalla.
+	var center_before := cam.target
+	_touch(cam, 0, Vector2(900, 600), true)
+	_drag(cam, 0, Vector2(900, 600), Vector2(900, 500))
+	_touch(cam, 0, Vector2(900, 500), false)
+	var screen_down := cam.screen_to_ground(Vector2(900, 700)) - cam.screen_to_ground(Vector2(900, 500))
+	check((cam.target - center_before).dot(screen_down) > 0.0, "arrastrar arriba sube el escenario")
+	# Pellizco: el punto entre los dedos se queda quieto y el zoom cambia.
+	var a := Vector2(300, 400)
+	var b := Vector2(500, 400)
+	_touch(cam, 0, a, true)
+	_touch(cam, 1, b, true)
+	var mid_ground := cam.screen_to_ground((a + b) / 2.0)
+	var size_before := cam.size
+	_drag(cam, 0, a, a - Vector2(50, 0))
+	_drag(cam, 1, b, b + Vector2(50, 0))
+	a -= Vector2(50, 0)
+	b += Vector2(50, 0)
+	check(cam.size < size_before, "separar los dedos acerca la cámara")
+	check(cam.screen_to_ground((a + b) / 2.0).distance_to(mid_ground) < 0.01, "el zoom va hacia los dedos")
+	_touch(cam, 0, a, false)
+	_touch(cam, 1, b, false)
+	cam.free()
