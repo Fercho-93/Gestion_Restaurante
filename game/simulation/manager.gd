@@ -3,7 +3,7 @@ extends RefCounted
 ## El gestor: el personaje que controla el jugador. Camina esquivando muebles y
 ## personas, usa objetos del local (el ordenador) y habla con la gente.
 
-enum State { LIBRE, ANDANDO, USANDO, HABLANDO }
+enum State { LIBRE, ANDANDO, USANDO, HABLANDO, TRABAJANDO }
 
 ## Si alguien le corta el paso tanto tiempo (minutos de juego), desiste.
 const GIVE_UP_MINUTES := 4.0
@@ -26,6 +26,12 @@ var talking_to := {}
 var blocked_time := 0.0
 ## Aviso para el jugador cuando no ha podido cumplir la orden ("" si no hay).
 var notice := ""
+## Tarea de sala que está haciendo (igual que la de un camarero) o vacía.
+var task := {}
+## Trabajo continuo que ha decidido hacer: "" (ninguno), "sala" o "limpieza".
+var covering := ""
+## Trato con los clientes: el jefe suele caer bien.
+var trato := 80.0
 ## Textos para describir la orden actual (los pone quien da la orden).
 var talk_name := ""
 var walk_zone := ""
@@ -108,6 +114,15 @@ func step(minutes: float, layout: RestaurantLayout, occupied: Array[Vector2i], c
 	return {}
 
 
+## Rapidez al trabajar (como la de un camarero).
+func speed_factor() -> float:
+	return 1.1
+
+
+func effective_trato() -> float:
+	return trato
+
+
 func describe() -> String:
 	if notice != "" and state == State.LIBRE:
 		return notice
@@ -124,7 +139,24 @@ func describe() -> String:
 			return "En el ordenador" if using == "ordenador" else "Usando " + using
 		State.HABLANDO:
 			return "Hablando con " + talk_name if talk_name != "" else "Hablando"
+		State.TRABAJANDO:
+			return _task_text()
+	if covering == "sala":
+		return "Atendiendo mesas (sin nada pendiente)"
+	if covering == "limpieza":
+		return "Limpiando (todo limpio)"
 	return "Libre"
+
+
+func _task_text() -> String:
+	match task.get("tipo", ""):
+		"pedido": return "Tomando nota"
+		"servir": return "Sirviendo platos"
+		"cobrar": return "Cobrando"
+		"acomodar": return "Acompañando a unos clientes"
+		"recoger_mesa": return "Recogiendo una mesa"
+		"fregar": return "Fregando el suelo"
+	return "Trabajando"
 
 
 func _set_destination(layout: RestaurantLayout, cell: Vector2i, occupied: Array[Vector2i]) -> void:

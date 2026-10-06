@@ -25,6 +25,7 @@ func _initialize() -> void:
 	test_nobody_walks_through_anything()
 	test_manager_talks()
 	test_talk_effects()
+	test_manager_works_and_cleaning()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -497,3 +498,59 @@ func test_talk_effects() -> void:
 	var low := w.effective_trato()
 	w.moral = 90.0
 	check(w.effective_trato() > low, "un empleado animado trata mejor")
+
+
+func test_manager_works_and_cleaning() -> void:
+	var data := load_data()
+	data["start"]["personal"] = data["start"]["personal"].filter(func(p): return p["puesto"] != "camarero")
+	var sim := RestaurantSim.new(data, 12 * 60, 21)
+	check(sim.waiters().is_empty(), "prueba sin camareros: solo el gestor")
+	# Llega un grupo: sin nadie que los acomode, esperan en la cola.
+	var g := CustomerGroup.new()
+	g.id = 500
+	g.size = 2
+	for i in 2:
+		g.members.append(Mover.new(sim.layout.spawn_cell))
+	sim.groups.append(g)
+	for i in 200:
+		sim.update(0.1)
+	check(g.state == CustomerGroup.State.EN_COLA, "sin nadie que los acomode, esperan en la cola")
+	# El gestor les acompaña a una mesa, les toma nota, sirve y cobra.
+	sim.order_manager_task({ "tipo": "acomodar", "grupo": g })
+	for i in 400:
+		sim.update(0.1)
+		if g.state == CustomerGroup.State.ESPERANDO_PEDIR:
+			break
+	check(g.state == CustomerGroup.State.ESPERANDO_PEDIR, "el gestor les sienta en una mesa")
+	var table: RestaurantLayout.Table = g.table
+	sim.set_manager_covering("sala")
+	for i in 3000:
+		sim.update(0.1)
+		if g.state == CustomerGroup.State.SALIENDO or g.state == CustomerGroup.State.FUERA:
+			break
+	check(g.state == CustomerGroup.State.SALIENDO or g.state == CustomerGroup.State.FUERA, "atendiendo mesas, el gestor les sirve y cobra")
+	check(not g.left_angry, "y se van contentos, no enfadados")
+	check(table.dirty, "al irse, la mesa queda sucia")
+	check(sim.free_table_for(g) != table, "una mesa sucia no se puede ocupar")
+	# Recoger la mesa y fregar una mancha.
+	var free_cells: Array[Vector2i] = []
+	for c in [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 3), Vector2i(0, 4), Vector2i(0, 6)]:
+		if not sim.stains.has(c):
+			free_cells.append(c)
+	sim.stains[free_cells[0]] = null
+	var clean_before := sim.cleanliness()
+	sim.stains[free_cells[1]] = null
+	check(sim.cleanliness() < clean_before, "las manchas bajan la limpieza")
+	sim.order_manager_clean_table(table)
+	for i in 600:
+		sim.update(0.1)
+		if not table.dirty:
+			break
+	check(not table.dirty, "el gestor recoge la mesa")
+	sim.set_manager_covering("limpieza")
+	for i in 1500:
+		sim.update(0.1)
+		if sim.stains.is_empty():
+			break
+	check(sim.stains.is_empty(), "limpiando, el gestor friega todas las manchas")
+	check(sim.manager.describe() != "", "el gestor describe lo que hace")

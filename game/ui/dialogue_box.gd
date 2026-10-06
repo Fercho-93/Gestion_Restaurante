@@ -60,7 +60,7 @@ func _rebuild_options() -> void:
 		b.custom_minimum_size = Vector2(380, 72)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.add_theme_font_size_override("font_size", 26)
-		b.pressed.connect(_choose.bind(option["id"]))
+		b.pressed.connect(_choose.bind(option["id"], option.get("trabajo", false)))
 		_options.add_child(b)
 
 
@@ -71,10 +71,15 @@ func close() -> void:
 		closed.emit()
 
 
-func _choose(option_id: String) -> void:
+## ¿Es el gestor hablando consigo mismo (qué hacer)?
+func is_self() -> bool:
+	return target.get("entity") is Manager
+
+
+func _choose(option_id: String, is_work: bool = false) -> void:
 	var answer := Conversation.choose(target, option_id, Game.sim)
 	_text_label.text = "«%s»" % answer
-	if option_id == "adios":
+	if option_id == "adios" or is_work:
 		# Se despide y el cuadro se cierra solo al momento.
 		for b in _options.get_children():
 			b.disabled = true

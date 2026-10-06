@@ -21,6 +21,8 @@ const RUSH_MINUTES := 60.0
 
 static func speaker_name(target: Dictionary) -> String:
 	var e = target["entity"]
+	if e is Manager:
+		return "Tú (gestor)"
 	if e is StaffMember:
 		return "%s (%s)" % [e.nombre, "camarero" if e.puesto == StaffMember.ROLE_WAITER else "cocina"]
 	if e is CustomerGroup:
@@ -37,6 +39,15 @@ static func customer_name(g: CustomerGroup, member: int) -> String:
 static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 	var e = target["entity"]
 	var list := []
+	if e is Manager:
+		if e.covering != "sala":
+			list.append({ "id": "cubrir_sala", "texto": "Ponerme a atender mesas", "trabajo": true })
+		if e.covering != "limpieza":
+			list.append({ "id": "cubrir_limpieza", "texto": "Ponerme a limpiar", "trabajo": true })
+		if e.covering != "":
+			list.append({ "id": "dejar", "texto": "Dejar lo que estoy haciendo", "trabajo": true })
+		list.append({ "id": "adios", "texto": "Nada por ahora" })
+		return list
 	if e is StaffMember:
 		list.append({ "id": "trabajo", "texto": "¿Cómo va el trabajo?" })
 		list.append({ "id": "como_estas", "texto": "¿Cómo estás?" })
@@ -45,6 +56,16 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 		list.append({ "id": "adios", "texto": "Sigue así" })
 		return list
 	var g: CustomerGroup = e
+	# El gestor puede hacer él mismo el trabajo de un camarero con este grupo.
+	if g.waiter == null:
+		if g.state == CustomerGroup.State.EN_COLA and sim.free_table_for(g) != null:
+			list.append({ "id": "acomodar", "texto": "Acompáñenme, tienen mesa", "trabajo": true })
+		elif g.state == CustomerGroup.State.ESPERANDO_PEDIR:
+			list.append({ "id": "pedido", "texto": "Les tomo nota yo", "trabajo": true })
+		elif g.is_food_ready():
+			list.append({ "id": "servir", "texto": "Les traigo la comida", "trabajo": true })
+		elif g.state == CustomerGroup.State.ESPERANDO_CUENTA:
+			list.append({ "id": "cobrar", "texto": "Les cobro yo", "trabajo": true })
 	list.append({ "id": "que_tal", "texto": "¿Qué tal todo?" })
 	var waiting := CustomerGroup.PATIENCE.has(g.state)
 	if waiting and g.mood() < 0.9 and not g.talked.has("disculpa"):
@@ -65,6 +86,13 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 ## Lo primero que dice la persona al acercarse el gestor.
 static func opening(target: Dictionary, sim: RestaurantSim) -> String:
 	var e = target["entity"]
+	if e is Manager:
+		match e.covering:
+			"sala":
+				return "Estoy atendiendo mesas. ¿Sigo o hago otra cosa?"
+			"limpieza":
+				return "Estoy limpiando el local. ¿Sigo o hago otra cosa?"
+		return "¿Qué hago ahora?"
 	if e is StaffMember:
 		var mood_hint := "" if e.moral >= 40.0 else " (Se le ve cansado.)"
 		if e.puesto == StaffMember.ROLE_COOK:
@@ -97,9 +125,31 @@ static func opening(target: Dictionary, sim: RestaurantSim) -> String:
 ## Elige una opción: aplica su efecto y devuelve la respuesta de la persona.
 static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) -> String:
 	var e = target["entity"]
+	if e is Manager:
+		match option_id:
+			"cubrir_sala":
+				sim.set_manager_covering("sala")
+				return "Manos a la obra: a atender mesas."
+			"cubrir_limpieza":
+				sim.set_manager_covering("limpieza")
+				return "A dejar el local reluciente."
+			"dejar":
+				sim.set_manager_covering("")
+				return "Vale, lo dejo."
+		return "Sigo a lo mío."
 	if e is StaffMember:
 		return _staff_choice(e, option_id, sim)
 	var g: CustomerGroup = e
+	if option_id in ["acomodar", "pedido", "servir", "cobrar"]:
+		sim.order_manager_task({ "tipo": option_id, "grupo": g })
+		match option_id:
+			"acomodar":
+				return "¡Estupendo, gracias!"
+			"pedido":
+				return "Perfecto, ahora le decimos."
+			"servir":
+				return "¡Gracias, tenemos hambre!"
+		return "Muy bien, gracias."
 	var first_time := not g.talked.has(option_id)
 	g.talked[option_id] = true
 	match option_id:
@@ -180,7 +230,7 @@ static func worst_aspect(g: CustomerGroup, sim: RestaurantSim) -> String:
 			service += v
 		aspects["trato"] = service / g.service_scores.size()
 	aspects["ambiente"] = sim.layout.ambiente
-	aspects["limpieza"] = sim.layout.limpieza
+	aspects["limpieza"] = sim.cleanliness()
 	if not g.dishes.is_empty():
 		aspects["precio"] = Satisfaction.value_for_money(g.bill, g.fair_bill)
 	var worst := "tiempo"

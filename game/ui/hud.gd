@@ -30,7 +30,7 @@ func _ready() -> void:
 	Game.sim.manager_started_using.connect(_on_manager_started_using)
 	Game.sim.manager_started_talking.connect(_on_manager_started_talking)
 	computer.closed.connect(_on_panel_closed)
-	dialogue.closed.connect(_on_panel_closed)
+	dialogue.closed.connect(_on_dialogue_closed)
 	_on_speed_changed(Game.clock.speed)
 
 
@@ -40,7 +40,7 @@ func _process(_delta: float) -> void:
 	rotate_hint.visible = window.x < window.y
 	var sim := Game.sim
 	# Si la conversación se corta (la persona se va, o mandas al gestor a otro sitio).
-	if dialogue.visible and sim.manager.state != Manager.State.HABLANDO:
+	if dialogue.visible and not dialogue.is_self() and sim.manager.state != Manager.State.HABLANDO:
 		dialogue.hide()
 		dialogue.target = {}
 		follow_manager()
@@ -85,6 +85,19 @@ func _on_manager_started_talking(target: Dictionary) -> void:
 
 func _on_panel_closed() -> void:
 	Game.sim.stop_manager()
+	follow_manager()
+
+
+## Al terminar de hablar, el gestor queda libre (salvo que se haya puesto a trabajar).
+func _on_dialogue_closed() -> void:
+	if Game.sim.manager.state == Manager.State.HABLANDO:
+		Game.sim.stop_manager()
+	follow_manager()
+
+
+## Tocar al gestor: ¿qué hago ahora?
+func open_self_dialogue() -> void:
+	dialogue.open({ "entity": Game.sim.manager, "member": 0 })
 	follow_manager()
 
 

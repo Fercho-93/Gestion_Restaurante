@@ -23,6 +23,10 @@ var _gestor: Bot
 var _wave_left := 0.0
 var _last_group_id := 0
 var _selection: MeshInstance3D
+## Platos sucios de cada mesa (se ven mientras está sin recoger): mesa -> Node3D
+var _dirty_marks := {}
+## Manchas del suelo: celda -> MeshInstance3D
+var _stain_marks := {}
 
 
 func setup(restaurant_sim: RestaurantSim) -> void:
@@ -91,6 +95,7 @@ func _process(delta: float) -> void:
 			_bots.erase(key)
 	_update_gestor(delta)
 	_face_conversation()
+	_sync_dirt()
 	# Marca en el suelo el destino del gestor mientras camina.
 	var path := sim.manager.mover.path
 	_selection.visible = not path.is_empty()
@@ -130,24 +135,97 @@ func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
 
 
 func _sync_staff(bot: Bot, s: StaffMember) -> void:
-	var moving := s.mover.is_moving() and not s.mover.blocked
 	bot.entity = s
 	bot.position = to_world(s.mover.pos)
 	bot.carrying = s.is_carrying_food()
-	bot.eyes = Bot.Eyes.FELIZ
-	var phase: String = s.task.get("fase", "")
-	var busy := not s.tickets.is_empty() or phase == "atender" or phase == "recoger"
-	bot.pose = Bot.Pose.ANDANDO if moving else (Bot.Pose.TRABAJANDO if busy else Bot.Pose.DE_PIE)
-	if moving:
-		bot.face_direction(to_world(s.mover.facing))
-	elif s.puesto == StaffMember.ROLE_COOK:
+	bot.eyes = Bot.Eyes.FELIZ if s.moral >= 40.0 else Bot.Eyes.NORMAL
+	if s.puesto == StaffMember.ROLE_COOK:
+		bot.pose = Bot.Pose.TRABAJANDO if not s.tickets.is_empty() else Bot.Pose.DE_PIE
 		bot.face_direction(Vector3(1, 0, 0))
-	elif phase == "atender" and s.task["grupo"].table != null:
-		bot.face_direction(to_world(Vector2(s.task["grupo"].table.cell)) - bot.position)
-	elif phase == "recoger":
+		return
+	_pose_for_task(bot, s.mover, s.task)
+
+
+## Postura y orientación de quien hace tareas de sala (camareros y el gestor).
+func _pose_for_task(bot: Bot, mover: Mover, task: Dictionary) -> void:
+	var phase: String = task.get("fase", "")
+	if mover.is_moving() and not mover.blocked:
+		bot.pose = Bot.Pose.ANDANDO
+		bot.face_direction(to_world(mover.facing))
+		return
+	var working := phase == "atender" or phase == "recoger"
+	bot.pose = Bot.Pose.TRABAJANDO if working else Bot.Pose.DE_PIE
+	var look_at = null
+	if phase == "atender":
+		var g = task.get("grupo")
+		if g != null and g.table != null and task["tipo"] != "acomodar":
+			look_at = g.table.cell
+		elif task.has("mesa"):
+			look_at = task["mesa"].cell
+		elif task.has("celda"):
+			look_at = task["celda"] + Vector2i(0, 1)
+		elif g != null and not g.members.is_empty():
+			look_at = g.members[0].last_cell
+	if phase == "recoger":
 		bot.face_direction(Vector3(1, 0, 0))
-	else:
+	elif look_at != null:
+		bot.face_direction(to_world(Vector2(look_at)) - bot.position)
+	elif not working:
 		bot.face_direction(TOWARDS_CAMERA)
+
+
+## Platos sucios en las mesas sin recoger y manchas en el suelo.
+func _sync_dirt() -> void:
+	for t in sim.layout.tables:
+		if not _dirty_marks.has(t):
+			_dirty_marks[t] = _make_dirty_plates(t)
+		_dirty_marks[t].visible = t.dirty
+	for cell in sim.stains:
+		if not _stain_marks.has(cell):
+			var stain := MeshInstance3D.new()
+			var disc := CylinderMesh.new()
+			disc.top_radius = 0.5
+			disc.bottom_radius = 0.5
+			disc.height = 0.01
+			stain.mesh = disc
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = Color(0.45, 0.33, 0.2, 0.75)
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.roughness = 0.3
+			stain.material_override = mat
+			var h := hash(cell)
+			stain.scale = Vector3(0.45 + (h % 7) * 0.03, 1, 0.3 + (h % 5) * 0.03)
+			stain.rotation.y = float(h % 31) * 0.2
+			stain.position = Vector3(cell.x + ((h % 9) - 4) * 0.03, 0.006, cell.y + ((h % 11) - 5) * 0.03)
+			add_child(stain)
+			_stain_marks[cell] = stain
+	for cell in _stain_marks.keys():
+		if not sim.stains.has(cell):
+			_stain_marks[cell].queue_free()
+			_stain_marks.erase(cell)
+
+
+func _make_dirty_plates(t: RestaurantLayout.Table) -> Node3D:
+	var node := Node3D.new()
+	node.position = Vector3(t.cell.x, 0.47, t.cell.y)
+	add_child(node)
+	var plate := Bot.material(Color("e8e4dc"))
+	var leftover := Bot.material(Color("8d6e4c"))
+	var spots := [Vector3(-0.15, 0, -0.12), Vector3(0.14, 0, 0.1), Vector3(0.12, 0.02, -0.14)]
+	for i in spots.size():
+		var p := MeshInstance3D.new()
+		p.mesh = Bot.resources()["cylinder"]
+		p.material_override = plate
+		p.scale = Vector3(0.2, 0.015 + i * 0.012, 0.2)
+		p.position = spots[i]
+		node.add_child(p)
+		var crumb := MeshInstance3D.new()
+		crumb.mesh = Bot.resources()["sphere"]
+		crumb.material_override = leftover
+		crumb.scale = Vector3(0.06, 0.02, 0.05)
+		crumb.position = spots[i] + Vector3(0.03, 0.02 + i * 0.012, 0)
+		node.add_child(crumb)
+	return node
 
 
 ## Durante una conversación, el gestor y la otra persona se miran.
@@ -183,8 +261,11 @@ func _update_gestor(delta: float) -> void:
 		_gestor.pose = Bot.Pose.SENTADO
 		var cell: Vector2i = sim.layout.objects[m.using]["celda"]
 		_gestor.face_direction(to_world(Vector2(cell)) - _gestor.position)
+	elif m.state == Manager.State.TRABAJANDO:
+		_pose_for_task(_gestor, m.mover, m.task)
 	else:
 		_gestor.pose = Bot.Pose.DE_PIE
+	_gestor.carrying = m.task.get("tipo", "") == "servir" and m.task.get("fase", "") == "ir_mesa"
 	_gestor.waving = _wave_left > 0.0 and m.state == Manager.State.LIBRE
 
 

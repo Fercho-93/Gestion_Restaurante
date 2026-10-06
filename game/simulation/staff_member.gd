@@ -79,7 +79,7 @@ func is_busy() -> bool:
 
 
 func is_carrying_food() -> bool:
-	return task.get("tipo", "") == "servir" and task.get("fase", "") == "ir_mesa"
+	return (task.get("tipo", "") == "servir" and task.get("fase", "") == "ir_mesa") or task.get("fase", "") == "llevar"
 
 
 func describe_task() -> String:
@@ -89,4 +89,7 @@ func describe_task() -> String:
 		"pedido": return "Tomando nota"
 		"servir": return "Sirviendo platos"
 		"cobrar": return "Cobrando"
+		"acomodar": return "Acompañando a unos clientes"
+		"recoger_mesa": return "Recogiendo una mesa"
+		"fregar": return "Fregando el suelo"
 	return "Libre"

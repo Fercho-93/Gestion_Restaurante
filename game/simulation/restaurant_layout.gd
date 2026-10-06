@@ -17,8 +17,12 @@ class Table:
 	var seats: Array[Vector2i] = []
 	## Celda desde la que el camarero atiende la mesa.
 	var service_cell: Vector2i
-	## Grupo sentado (CustomerGroup) o null si está libre.
+	## Grupo sentado (o reservado para sentarse): CustomerGroup o null si está libre.
 	var group = null
+	## Quedan platos sucios del grupo anterior: no se puede sentar nadie hasta recogerla.
+	var dirty := false
+	## Quien la está recogiendo ahora mismo (o null).
+	var cleaner = null
 
 	func capacity() -> int:
 		return seats.size()
@@ -33,6 +37,8 @@ var tables: Array[Table] = []
 var spawn_cell: Vector2i
 var queue_cells: Array[Vector2i] = []
 var pass_cell: Vector2i
+## Dónde se recibe a los clientes de la cola para acompañarlos a su mesa.
+var reception_cell: Vector2i
 ## Dónde esperan los camareros cuando no tienen trabajo (uno por camarero).
 var waiter_homes: Array[Vector2i] = []
 var manager_home: Vector2i
@@ -56,6 +62,7 @@ func _init(d: Dictionary) -> void:
 	region = Rect2i(-STREET_WIDTH, 0, size.x + STREET_WIDTH, size.y)
 	spawn_cell = v2i(d["aparicion"])
 	pass_cell = v2i(d["pase"])
+	reception_cell = v2i(d["recepcion"])
 	for c in d["puestos_camareros"]:
 		waiter_homes.append(v2i(c))
 	manager_home = v2i(d["puesto_gestor"])
@@ -166,6 +173,13 @@ func nearest_free_cell(cell: Vector2i, from: Vector2i, occupied: Array[Vector2i]
 				best = c
 				best_d = d
 	return best
+
+
+func table_at(cell: Vector2i) -> Table:
+	for t in tables:
+		if t.cell == cell:
+			return t
+	return null
 
 
 func zone_name_at(cell: Vector2i) -> String:

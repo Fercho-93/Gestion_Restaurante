@@ -13,7 +13,7 @@ func _ready() -> void:
 	sun.rotation_degrees = Vector3(-55, -30, 0)
 	world.setup(Game.sim)
 	camera.focus(Vector3(Game.sim.layout.size.x / 2.0 - 1.0, 0, Game.sim.layout.size.y / 2.0))
-	hud.show_info("Toca el suelo para mover al gestor · el ordenador del despacho para gestionar")
+	hud.show_info("Toca: suelo = ir · persona = hablar · a ti = trabajar")
 
 
 # En _input (y no _unhandled_input) para ver también los arrastres que usa la cámara.
@@ -33,7 +33,7 @@ func _on_tap(screen_pos: Vector2) -> void:
 	var bot: Bot = world.person_at(camera, screen_pos)
 	if bot != null and object_id == "":
 		if bot.role == Bot.Role.GESTOR:
-			hud.show_info(_describe(bot))
+			hud.open_self_dialogue()
 		else:
 			sim.order_manager_talk(bot.entity, bot.member_index)
 			sim.manager.talk_name = _short_name(bot)
@@ -46,6 +46,16 @@ func _on_tap(screen_pos: Vector2) -> void:
 	var ground := camera.screen_to_ground(screen_pos)
 	var cell := Vector2i(roundi(ground.x), roundi(ground.z))
 	if not sim.layout.region.has_point(cell):
+		return
+	# Una mesa sin recoger o una mancha: el gestor va a limpiarla.
+	var table := sim.layout.table_at(cell)
+	if table != null and table.dirty and table.cleaner == null:
+		sim.order_manager_clean_table(table)
+		hud.follow_manager()
+		return
+	if sim.stains.has(cell) and sim.stains[cell] == null:
+		sim.order_manager_mop(cell)
+		hud.follow_manager()
 		return
 	sim.order_manager_walk(cell)
 	sim.manager.walk_zone = sim.layout.zone_name_at(sim.manager.destination)

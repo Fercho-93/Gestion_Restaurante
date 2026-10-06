@@ -302,7 +302,17 @@ Hito 1 en curso:
   lo que han comido, precios, trabajo pendiente). Los camareros se paran a hablar.
   De momento hablar solo informa; más adelante tendrá efectos (ánimo del cliente,
   moral del empleado, quejas, propinas…).
-- Siguiente: Carta y precios.
+- ✅ Hablar tiene efectos: disculparse (más paciencia), invitar (cuesta dinero, sube mucho
+  la valoración), preguntar qué mejorar (responden con lo peor real de su visita),
+  compensar a quien se va enfadado. Empleados con ánimo (rapidez, trato, calidad):
+  felicitar lo sube; meter prisa acelera pero desanima.
+- ✅ Nuevas tareas de sala: acomodar a los clientes (ya no se sientan solos), recoger las
+  mesas sucias (sin recoger no se puede sentar nadie) y fregar manchas. La limpieza del
+  local baja con manchas y mesas sucias, y los clientes lo notan.
+- ✅ El gestor trabaja: tareas sueltas desde la conversación (acompañar, tomar nota,
+  servir, cobrar), tocar una mesa sucia o una mancha para limpiarla, o tocarse a sí
+  mismo para ponerse a atender mesas o a limpiar de continuo.
+- Siguiente: vida en la sala (bocadillos, reacciones, eventos) y cansancio del gestor.
 
 ## 11. Pendiente de decidir
 

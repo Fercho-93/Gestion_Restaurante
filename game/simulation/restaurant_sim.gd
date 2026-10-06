@@ -14,9 +14,14 @@ const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
 const RESTOCK_HOUR := 11
 ## Duración (minutos, a velocidad normal) de cada acción del camarero.
-const WAITER_ACTION_TIME := { "pedido": 1.5, "servir": 0.5, "cobrar": 1.5, "recoger": 0.5 }
-## Prioridad de las tareas del camarero (menor = antes).
-const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "pedido": 2 }
+const WAITER_ACTION_TIME := { "pedido": 1.5, "servir": 0.5, "cobrar": 1.5, "recoger": 0.5,
+	"acomodar": 0.3, "limpiar_mesa": 1.0, "fregar": 1.5 }
+## Tareas de sala y su prioridad (menor = antes).
+const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "acomodar": 2, "pedido": 3,
+	"recoger_mesa": 4, "fregar": 5 }
+const CLEANING_TASKS := ["recoger_mesa", "fregar"]
+## Manchas en el suelo como mucho (y cuánto restan a la limpieza cada una).
+const MAX_STAINS := 12
 ## Tráfico: si alguien no puede avanzar, cada tanto busca otro camino; si sigue
 ## atascado, se aparta a un lado; y como último recurso pasa igualmente.
 const REPLAN_EVERY := 0.5
@@ -46,6 +51,8 @@ var rng := RandomNumberGenerator.new()
 ## Reloj absoluto en minutos de juego.
 var minutes := 0.0
 var day_stats: Dictionary = {}
+## Manchas en el suelo: celda -> quien la está limpiando (o null).
+var stains: Dictionary = {}
 ## Veces que alguien ha tenido que "atravesar" a otro por un atasco imposible.
 var forced_passes := 0
 var _next_group_id := 1
@@ -165,11 +172,13 @@ func _is_idle(key: String) -> bool:
 
 func order_manager_walk(cell: Vector2i) -> void:
 	_end_talk()
+	_stop_manager_work()
 	manager.walk_to(layout, cell, cells_taken_by_others("m"))
 
 
 func order_manager_use(object_id: String) -> void:
 	_end_talk()
+	_stop_manager_work()
 	manager.go_use(layout, object_id, cells_taken_by_others("m"))
 
 
@@ -177,6 +186,7 @@ func order_manager_use(object_id: String) -> void:
 ## StaffMember.
 func order_manager_talk(entity, member: int = 0) -> void:
 	_end_talk()
+	_stop_manager_work()
 	var target := { "entity": entity, "member": member }
 	var cell = person_cell(target)
 	if cell != null:
@@ -187,6 +197,39 @@ func order_manager_talk(entity, member: int = 0) -> void:
 func stop_manager() -> void:
 	_end_talk()
 	manager.stop()
+
+
+## El gestor hace él mismo una tarea de sala: {tipo, grupo|mesa|celda}.
+func order_manager_task(task: Dictionary) -> void:
+	_end_talk()
+	_stop_manager_work()
+	manager.stop()
+	start_task(manager, task)
+	manager.state = Manager.State.TRABAJANDO
+
+
+## Trabajo continuo del gestor: "sala" (atender mesas), "limpieza" o "" (dejarlo).
+func set_manager_covering(mode: String) -> void:
+	_end_talk()
+	_stop_manager_work()
+	manager.stop()
+	manager.covering = mode
+
+
+func order_manager_clean_table(table: RestaurantLayout.Table) -> void:
+	if table.dirty and table.cleaner == null:
+		order_manager_task({ "tipo": "recoger_mesa", "mesa": table })
+
+
+func order_manager_mop(cell: Vector2i) -> void:
+	if stains.has(cell) and stains[cell] == null:
+		order_manager_task({ "tipo": "fregar", "celda": cell })
+
+
+func _stop_manager_work() -> void:
+	if not manager.task.is_empty():
+		_end_waiter_task(manager)
+	manager.covering = ""
 
 
 ## Celda donde está una persona ({entity, member}), o null si ya no está en el local.
@@ -313,6 +356,17 @@ func _unblock(m: Mover, key: String) -> void:
 
 
 func _update_manager(dt: float) -> void:
+	# Trabajando en sala (una tarea suelta o atendiendo/limpiando de continuo).
+	if manager.state == Manager.State.TRABAJANDO or (manager.state == Manager.State.LIBRE and manager.covering != ""):
+		_walk(manager.mover, "m", dt)
+		if manager.task.is_empty() and manager.covering != "":
+			var allowed: Array = CLEANING_TASKS if manager.covering == "limpieza" else ["servir", "cobrar", "acomodar", "pedido"]
+			manager.state = Manager.State.TRABAJANDO if _assign_waiter_task(manager, allowed) else Manager.State.LIBRE
+		elif not manager.task.is_empty():
+			_progress_waiter_task(manager, dt)
+		if manager.task.is_empty() and manager.state == Manager.State.TRABAJANDO and manager.covering == "":
+			manager.state = Manager.State.LIBRE
+		return
 	# Si le han pedido paso estando libre, se aparta.
 	if manager.state == Manager.State.LIBRE and manager.mover.is_moving():
 		_walk(manager.mover, "m", dt)
@@ -373,7 +427,7 @@ func _update_groups(dt: float) -> void:
 				if g.all_arrived():
 					g.set_state(CustomerGroup.State.EN_COLA)
 			CustomerGroup.State.EN_COLA:
-				_try_seat(g)
+				pass  # Esperan a que alguien les acompañe a una mesa.
 			CustomerGroup.State.YENDO_A_MESA:
 				if g.all_arrived():
 					g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
@@ -402,19 +456,51 @@ func _update_queue_positions() -> void:
 				m.go_to(layout, target)
 
 
-func _try_seat(g: CustomerGroup) -> void:
+## Mesa libre, limpia y del tamaño justo para el grupo (o null si no hay).
+func free_table_for(g: CustomerGroup) -> RestaurantLayout.Table:
 	var best: RestaurantLayout.Table = null
 	for table in layout.tables:
-		if table.group == null and table.capacity() >= g.size:
+		if table.group == null and not table.dirty and table.capacity() >= g.size:
 			if best == null or table.capacity() < best.capacity():
 				best = table
-	if best == null:
-		return
-	best.group = g
-	g.table = best
+	return best
+
+
+## El primer grupo de la cola (el que lleva más esperando).
+func first_in_queue() -> CustomerGroup:
+	for g in groups:
+		if g.state == CustomerGroup.State.EN_COLA:
+			return g
+	return null
+
+
+## Lleva al grupo a su mesa (ya reservada en g.table).
+func _seat(g: CustomerGroup) -> void:
 	for i in g.members.size():
-		g.members[i].go_to(layout, best.seats[i])
+		g.members[i].go_to(layout, g.table.seats[i])
 	g.set_state(CustomerGroup.State.YENDO_A_MESA)
+
+
+## Limpieza que perciben los clientes: baja con las manchas y las mesas sin recoger.
+func cleanliness() -> float:
+	var dirty_tables := 0
+	for t in layout.tables:
+		if t.dirty:
+			dirty_tables += 1
+	return clampf(layout.limpieza + 20.0 - 7.0 * stains.size() - 5.0 * dirty_tables, 0.0, 100.0)
+
+
+func _add_stain_near(cell: Vector2i) -> void:
+	if stains.size() >= MAX_STAINS:
+		return
+	var options: Array[Vector2i] = []
+	for dx in range(-2, 3):
+		for dy in range(-2, 3):
+			var c := cell + Vector2i(dx, dy)
+			if c.x >= 0 and layout.can_stand(c) and not stains.has(c):
+				options.append(c)
+	if not options.is_empty():
+		stains[options[rng.randi() % options.size()]] = null
 
 
 func _fed_up_reason(g: CustomerGroup) -> String:
@@ -438,6 +524,11 @@ func _leave_angry(g: CustomerGroup, reason: String) -> void:
 
 func _leave(g: CustomerGroup) -> void:
 	if g.table != null:
+		# Si han llegado a comer, dejan la mesa con platos sucios (y a veces alguna mancha).
+		if not g.dishes.is_empty():
+			g.table.dirty = true
+			if rng.randf() < 0.25:
+				_add_stain_near(g.table.cell)
 		g.table.group = null
 		g.table = null
 	kitchen_queue = kitchen_queue.filter(func(t: Dictionary): return t["grupo"] != g)
@@ -451,7 +542,7 @@ func _update_reputation(satisfaction: float) -> void:
 	reputation = clampf(reputation + (satisfaction / 100.0 - reputation) * 0.03, 0.0, 1.0)
 
 
-# --- Camareros --------------------------------------------------------------
+# --- Camareros (y el gestor cuando echa una mano) ---------------------------------
 
 func _update_waiters(dt: float) -> void:
 	for w in waiters():
@@ -460,6 +551,8 @@ func _update_waiters(dt: float) -> void:
 		_walk(w.mover, "s%d" % w.id, dt)
 		if w.task.is_empty():
 			_assign_waiter_task(w)
+		else:
+			_preempt_cleaning(w)
 		if w.task.is_empty():
 			# Vuelve a su sitio, si no se lo ha ocupado nadie.
 			if w.mover.arrived() and w.mover.last_cell != w.home and cell_free_for(w.home, "s%d" % w.id):
@@ -468,9 +561,20 @@ func _update_waiters(dt: float) -> void:
 			_progress_waiter_task(w, dt)
 
 
-func _assign_waiter_task(w: StaffMember) -> void:
-	var best: CustomerGroup = null
-	var best_type := ""
+## Busca la tarea más urgente para `w` (camarero o gestor). `allowed`: si no está vacío,
+## solo esas tareas. Devuelve si ha cogido alguna.
+func _assign_waiter_task(w, allowed: Array = []) -> bool:
+	var best := _find_task(allowed)
+	if best.is_empty():
+		return false
+	start_task(w, best)
+	return true
+
+
+## La tarea pendiente más urgente (sin cogerla todavía), o vacío si no hay.
+func _find_task(allowed: Array = []) -> Dictionary:
+	var best := {}
+	var queue_head := first_in_queue()
 	for g in groups:
 		if g.waiter != null:
 			continue
@@ -481,27 +585,84 @@ func _assign_waiter_task(w: StaffMember) -> void:
 			kind = "cobrar"
 		elif g.state == CustomerGroup.State.ESPERANDO_PEDIR:
 			kind = "pedido"
-		if kind == "":
-			continue
-		if best == null or WAITER_PRIORITY[kind] < WAITER_PRIORITY[best_type] \
-				or (WAITER_PRIORITY[kind] == WAITER_PRIORITY[best_type] and g.state_time > best.state_time):
-			best = g
-			best_type = kind
-	if best == null:
+		elif g.state == CustomerGroup.State.EN_COLA and free_table_for(g) != null:
+			kind = "acomodar"
+		if kind != "":
+			best = _better_task(best, { "tipo": kind, "grupo": g, "edad": g.state_time }, allowed)
+	# Si hay gente esperando mesa, recoger las mesas sucias corre prisa.
+	var queue_waiting := queue_head != null and free_table_for(queue_head) == null
+	for table in layout.tables:
+		if table.dirty and table.cleaner == null:
+			var cleanup := { "tipo": "recoger_mesa", "mesa": table, "edad": 0.0 }
+			if queue_waiting and table.capacity() >= queue_head.size:
+				cleanup["prioridad"] = 1.5
+			best = _better_task(best, cleanup, allowed)
+	for cell in stains:
+		if stains[cell] == null:
+			best = _better_task(best, { "tipo": "fregar", "celda": cell, "edad": 0.0 }, allowed)
+	return best
+
+
+## Si está limpiando y un cliente necesita algo, lo deja y atiende al cliente.
+func _preempt_cleaning(w) -> void:
+	if w.task.is_empty() or not CLEANING_TASKS.has(w.task["tipo"]) or w.task.get("prioridad", 9.0) < 2.0:
 		return
-	best.waiter = w
-	w.task = { "tipo": best_type, "grupo": best, "tiempo": 0.0 }
-	if best_type == "servir":
-		w.task["fase"] = "ir_pase"
-		w.mover.go_to(layout, layout.pass_cell)
-	else:
-		w.task["fase"] = "ir_mesa"
-		w.mover.go_to(layout, best.table.service_cell)
+	if w.task["fase"] == "atender":
+		return
+	var urgent := _find_task(["servir", "cobrar", "acomodar", "pedido"])
+	if not urgent.is_empty():
+		_end_waiter_task(w)
+		start_task(w, urgent)
 
 
-func _progress_waiter_task(w: StaffMember, dt: float) -> void:
-	var g: CustomerGroup = w.task["grupo"]
-	if g.state == CustomerGroup.State.SALIENDO or g.state == CustomerGroup.State.FUERA:
+func _better_task(current: Dictionary, candidate: Dictionary, allowed: Array) -> Dictionary:
+	if not allowed.is_empty() and not allowed.has(candidate["tipo"]):
+		return current
+	if current.is_empty():
+		return candidate
+	var a: float = candidate.get("prioridad", WAITER_PRIORITY[candidate["tipo"]])
+	var b: float = current.get("prioridad", WAITER_PRIORITY[current["tipo"]])
+	if a < b or (a == b and candidate["edad"] > current["edad"]):
+		return candidate
+	return current
+
+
+## Empieza una tarea {tipo, grupo|mesa|celda} para un camarero o el gestor.
+func start_task(w, task: Dictionary) -> void:
+	w.task = task
+	w.task["tiempo"] = 0.0
+	match task["tipo"]:
+		"servir":
+			task["grupo"].waiter = w
+			task["fase"] = "ir_pase"
+			w.mover.go_to(layout, layout.pass_cell)
+		"cobrar", "pedido":
+			task["grupo"].waiter = w
+			task["fase"] = "ir_mesa"
+			w.mover.go_to(layout, task["grupo"].table.service_cell)
+		"acomodar":
+			var g: CustomerGroup = task["grupo"]
+			g.waiter = w
+			g.table = free_table_for(g)
+			g.table.group = g
+			task["fase"] = "ir_recepcion"
+			w.mover.go_to(layout, layout.reception_cell)
+		"recoger_mesa":
+			task["mesa"].cleaner = w
+			task["fase"] = "ir_mesa"
+			w.mover.go_to(layout, task["mesa"].service_cell)
+		"fregar":
+			stains[task["celda"]] = w
+			task["fase"] = "ir_mesa"
+			w.mover.go_to(layout, task["celda"])
+
+
+func _progress_waiter_task(w, dt: float) -> void:
+	var g: CustomerGroup = w.task.get("grupo")
+	if g != null and (g.state == CustomerGroup.State.SALIENDO or g.state == CustomerGroup.State.FUERA):
+		_end_waiter_task(w)
+		return
+	if w.task["tipo"] == "fregar" and not stains.has(w.task["celda"]):
 		_end_waiter_task(w)
 		return
 	match w.task["fase"]:
@@ -514,25 +675,62 @@ func _progress_waiter_task(w: StaffMember, dt: float) -> void:
 			if w.task["tiempo"] <= 0.0:
 				w.task["fase"] = "ir_mesa"
 				w.mover.go_to(layout, g.table.service_cell)
-		"ir_mesa":
+		"ir_recepcion":
 			if w.mover.arrived():
 				w.task["fase"] = "atender"
-				w.task["tiempo"] = WAITER_ACTION_TIME[w.task["tipo"]] / w.speed_factor()
+				w.task["tiempo"] = WAITER_ACTION_TIME["acomodar"] / w.speed_factor()
+		"ir_mesa":
+			if w.mover.arrived():
+				var action: String = w.task["tipo"]
+				if action == "recoger_mesa":
+					action = "limpiar_mesa"
+				w.task["fase"] = "atender"
+				w.task["tiempo"] = WAITER_ACTION_TIME[action] / w.speed_factor()
 		"atender":
 			w.task["tiempo"] -= dt
 			if w.task["tiempo"] <= 0.0:
-				g.service_scores.append(w.effective_trato())
-				match w.task["tipo"]:
-					"pedido": _take_order(g)
-					"servir": _serve(g)
-					"cobrar": _charge(g)
+				_finish_task(w)
+		"llevar":
+			if w.mover.arrived():
 				_end_waiter_task(w)
 
 
-func _end_waiter_task(w: StaffMember) -> void:
+func _finish_task(w) -> void:
+	var g: CustomerGroup = w.task.get("grupo")
+	match w.task["tipo"]:
+		"pedido":
+			g.service_scores.append(w.effective_trato())
+			_take_order(g)
+		"servir":
+			g.service_scores.append(w.effective_trato())
+			_serve(g)
+		"cobrar":
+			g.service_scores.append(w.effective_trato())
+			_charge(g)
+		"acomodar":
+			g.service_scores.append(w.effective_trato())
+			_seat(g)
+		"recoger_mesa":
+			w.task["mesa"].dirty = false
+		"fregar":
+			stains.erase(w.task["celda"])
+	_end_waiter_task(w)
+
+
+func _end_waiter_task(w) -> void:
 	var g: CustomerGroup = w.task.get("grupo")
 	if g != null and g.waiter == w:
 		g.waiter = null
+		# Si iba a acompañarles y no llegó a hacerlo, la mesa vuelve a quedar libre.
+		if w.task["tipo"] == "acomodar" and g.state == CustomerGroup.State.EN_COLA and g.table != null:
+			g.table.group = null
+			g.table = null
+	var table = w.task.get("mesa")
+	if table != null and table.cleaner == w:
+		table.cleaner = null
+	var cell = w.task.get("celda")
+	if cell != null and stains.has(cell) and stains[cell] == w:
+		stains[cell] = null
 	w.task = {}
 
 
@@ -595,7 +793,7 @@ func _charge(g: CustomerGroup) -> void:
 		"tiempo": clampf(100.0 - g.wait_penalty * 50.0, 0.0, 100.0),
 		"trato": service,
 		"ambiente": layout.ambiente,
-		"limpieza": layout.limpieza,
+		"limpieza": cleanliness(),
 		"calidad_precio": Satisfaction.value_for_money(g.bill, g.fair_bill),
 	})
 	# Lo que haya hecho el gestor por ellos (disculpas, invitaciones...) cuenta.
@@ -661,6 +859,11 @@ func _restock() -> void:
 
 
 func _close_day() -> void:
+	# El servicio de limpieza de la noche deja el local impecable para mañana.
+	for t in layout.tables:
+		t.dirty = false
+		t.cleaner = null
+	stains.clear()
 	var wages := 0.0
 	for s in staff:
 		wages += s.salario_dia
