@@ -21,6 +21,9 @@ En el móvil, gíralo en horizontal.
 Al empezar se elige el barrio (universitario, acomodado, alternativo u oficinas): cada
 uno tiene su gente, sus precios, su alquiler y sus horas fuertes.
 
+Botón **Construir** (arriba): con el tiempo parado se compran, colocan, giran, mueven y
+venden mesas y decoración (verde = se puede, rojo = no, con el motivo).
+
 Controles: tocar el suelo para mover al gestor; tocar a una persona para ir a hablar
 con ella (el botón "Ficha" muestra sus necesidades, rasgos, gustos y recuerdos); tocarte a ti mismo para ponerte a atender mesas, limpiar o tomar un café;
 tocar una mesa sucia o una mancha para limpiarla; el ordenador del despacho para

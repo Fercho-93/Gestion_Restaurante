@@ -14,6 +14,9 @@ extends CanvasLayer
 @onready var toasts: Toasts = %Toasts
 @onready var top_bar: Control = $TopBar
 @onready var bottom_bar: Control = $BottomBar
+## Modo construcción: botón de la barra de arriba y panel con el catálogo.
+var build_button: Button
+var build_panel: BuildPanel
 @onready var speed_buttons := {
 	0: %PauseButton,
 	1: %Speed1Button,
@@ -34,6 +37,37 @@ func _ready() -> void:
 	computer.closed.connect(_on_panel_closed)
 	dialogue.closed.connect(_on_dialogue_closed)
 	_on_speed_changed(Game.clock.speed)
+	build_button = Button.new()
+	build_button.text = "Construir"
+	build_button.custom_minimum_size = Vector2(190, 72)
+	build_button.add_theme_font_size_override("font_size", 30)
+	var row := %Speed4Button.get_parent()
+	row.add_child(build_button)
+	row.move_child(build_button, %Speed4Button.get_index() + 1)
+	build_panel = BuildPanel.new()
+	build_panel.visible = false
+	add_child(build_panel)
+	move_child(build_panel, top_bar.get_index())
+
+
+## Conecta el modo construcción (lo crea la escena principal).
+func setup_build(build: BuildMode) -> void:
+	build_panel.setup(build)
+	build.changed.connect(_on_build_changed)
+	_on_build_changed()
+
+
+func _on_build_changed() -> void:
+	var building := build_panel.build != null and build_panel.build.active
+	bottom_bar.visible = not building
+	build_button.text = "Construyendo…" if building else "Construir"
+	build_button.disabled = building
+	for s in speed_buttons:
+		speed_buttons[s].disabled = building
+	if building:
+		show_info("Modo construcción · el tiempo está parado")
+	else:
+		follow_manager()
 
 
 func _process(_delta: float) -> void:
@@ -79,6 +113,8 @@ func blocks_point(screen_pos: Vector2) -> bool:
 		return true
 	if toasts.covers(screen_pos):
 		return true
+	if build_panel != null and build_panel.covers(screen_pos):
+		return true
 	return top_bar.get_global_rect().has_point(screen_pos) or bottom_bar.get_global_rect().has_point(screen_pos)
 
 
@@ -119,7 +155,7 @@ func _dishes_cooking() -> int:
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event.is_pressed() and event.keycode == KEY_SPACE:
+	if event.is_pressed() and event.keycode == KEY_SPACE and not build_panel.visible:
 		Game.clock.toggle_pause()
 
 

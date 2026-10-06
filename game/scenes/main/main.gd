@@ -7,6 +7,7 @@ extends Node3D
 @onready var hud: HUD = $HUD
 
 var _taps := TapDetector.new()
+var build := BuildMode.new()
 
 
 func _ready() -> void:
@@ -15,6 +16,18 @@ func _ready() -> void:
 	camera.focus(Vector3(Game.sim.layout.size.x / 2.0 - 1.0, 0, Game.sim.layout.size.y / 2.0))
 	hud.show_info("Toca: suelo = ir · persona = hablar · a ti = trabajar")
 	hud.toasts.pressed.connect(func(cell: Vector2i): camera.focus(Vector3(cell.x, 0, cell.y)))
+	add_child(build)
+	build.setup(Game.sim, camera)
+	hud.setup_build(build)
+	hud.build_button.pressed.connect(_enter_build)
+	hud.build_panel.done.connect(build.exit)
+
+
+func _enter_build() -> void:
+	hud.dialogue.close()
+	if hud.computer.visible:
+		hud.computer.close()
+	build.enter()
 
 
 # En _input (y no _unhandled_input) para ver también los arrastres que usa la cámara.
@@ -28,6 +41,9 @@ func _input(event: InputEvent) -> void:
 ## adonde va el gestor.
 func _on_tap(screen_pos: Vector2) -> void:
 	if hud.blocks_point(screen_pos):
+		return
+	if build.active:
+		build.tap(screen_pos)
 		return
 	var sim := Game.sim
 	var object_id: String = world.object_at(camera, screen_pos)

@@ -16,6 +16,8 @@ var barrios: Dictionary = {}
 ## Tipos de vecino (estudiante, ejecutivo...) y rasgos de carácter.
 var perfiles: Dictionary = {}
 var rasgos: Dictionary = {}
+## Catálogo de muebles y decoración del modo construcción.
+var muebles: Dictionary = {}
 
 
 func _ready() -> void:
@@ -30,6 +32,7 @@ func load_all() -> void:
 	barrios = _by_id(_load_json("barrios.json"))
 	perfiles = _by_id(_load_json("perfiles.json"))
 	rasgos = _by_id(_load_json("rasgos.json"))
+	muebles = _by_id(_load_json("muebles.json"))
 	for error in validate():
 		push_error(error)
 
@@ -37,7 +40,7 @@ func load_all() -> void:
 ## Todo lo que necesita RestaurantSim para arrancar. Con un barrio, la clientela son sus
 ## vecinos; sin él, clientes anónimos con la demanda genérica.
 func sim_data(barrio_id: String = "") -> Dictionary:
-	var data := { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand }
+	var data := { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand, "muebles": muebles }
 	if barrios.has(barrio_id):
 		data["barrio"] = barrios[barrio_id]
 		data["perfiles"] = perfiles
@@ -70,6 +73,9 @@ func validate() -> Array[String]:
 		for recipe_id in perfiles[profile_id]["gustos"]:
 			if not recipes.has(recipe_id):
 				errors.append("Perfil '%s' le gusta una receta desconocida '%s'" % [profile_id, recipe_id])
+	for m in start.get("local", {}).get("muebles", []):
+		if not muebles.has(m["tipo"]):
+			errors.append("El local empieza con un mueble desconocido '%s'" % m["tipo"])
 	return errors
 
 

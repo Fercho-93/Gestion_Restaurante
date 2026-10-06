@@ -28,6 +28,8 @@ var _selection: MeshInstance3D
 var _dirty_marks := {}
 ## Manchas del suelo: celda -> MeshInstance3D
 var _stain_marks := {}
+## Muebles colocados (mesas y decoración): se rehacen al reformar el local.
+var _furniture_root: Node3D
 
 
 func setup(restaurant_sim: RestaurantSim) -> void:
@@ -35,6 +37,10 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	_build_floor()
 	_build_walls()
 	_build_furniture()
+	_furniture_root = Node3D.new()
+	add_child(_furniture_root)
+	_rebuild_placed_furniture()
+	sim.layout_changed.connect(_rebuild_placed_furniture)
 	_gestor = Bot.new()
 	_gestor.setup(Bot.Role.GESTOR, 0)
 	_gestor.entity = sim.manager
@@ -200,11 +206,26 @@ func _pose_for_task(bot: Bot, mover: Mover, task: Dictionary) -> void:
 
 
 ## Platos sucios en las mesas sin recoger y manchas en el suelo.
+## Mesas, sillas y decoración, según los muebles que hay ahora en el local.
+func _rebuild_placed_furniture() -> void:
+	for child in _furniture_root.get_children():
+		child.queue_free()
+	for f in sim.layout.furniture:
+		var model := FurnitureModels.build(sim.layout.catalog[f["tipo"]], f["rot"])
+		model.position = Vector3(f["celda"].x, 0, f["celda"].y)
+		_furniture_root.add_child(model)
+
+
 func _sync_dirt() -> void:
 	for t in sim.layout.tables:
 		if not _dirty_marks.has(t):
 			_dirty_marks[t] = _make_dirty_plates(t)
 		_dirty_marks[t].visible = t.dirty
+		_dirty_marks[t].position = Vector3(t.cell.x, 0.47, t.cell.y)
+	for t in _dirty_marks.keys():
+		if not sim.layout.tables.has(t):
+			_dirty_marks[t].queue_free()
+			_dirty_marks.erase(t)
 	for cell in sim.stains:
 		if not _stain_marks.has(cell):
 			var stain := MeshInstance3D.new()
@@ -371,17 +392,6 @@ func _build_walls() -> void:
 
 func _build_furniture() -> void:
 	var layout := sim.layout
-	for table in layout.tables:
-		var c := Vector3(table.cell.x, 0, table.cell.y)
-		_box(Vector3(0.7, 0.06, 0.7), c + Vector3(0, 0.42, 0), WOOD)
-		_box(Vector3(0.56, 0.01, 0.56), c + Vector3(0, 0.455, 0), Color("f4efe6"))
-		_box(Vector3(0.1, 0.4, 0.1), c + Vector3(0, 0.2, 0), WOOD.darkened(0.3))
-		for seat in table.seats:
-			var s := Vector3(seat.x, 0, seat.y)
-			var away := (s - c).normalized()
-			_box(Vector3(0.36, 0.16, 0.36), s + Vector3(0, 0.08, 0), WOOD.darkened(0.25))
-			var back_size := Vector3(0.05, 0.36, 0.36) if absf(away.x) > 0.5 else Vector3(0.36, 0.36, 0.05)
-			_box(back_size, s + away * 0.17 + Vector3(0, 0.34, 0), WOOD.darkened(0.25))
 	for cell in layout.counter_cells:
 		var p := Vector3(cell.x, 0, cell.y)
 		_box(Vector3(0.98, 0.8, 0.98), p + Vector3(0, 0.4, 0), Color("c7ccd1"))

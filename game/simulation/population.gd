@@ -43,9 +43,8 @@ func _make_neighbor(index: int, rng: RandomNumberGenerator) -> Neighbor:
 	var b: Array = n.profile["presupuesto"]
 	n.budget = rng.randf_range(float(b[0]), float(b[1]))
 	var likes: Array = n.profile["gustos"].duplicate()
-	likes.shuffle()
-	for dish in likes.slice(0, 2):
-		n.favorites.append(dish)
+	while n.favorites.size() < 2 and not likes.is_empty():
+		n.favorites.append(likes.pop_at(rng.randi() % likes.size()))
 	return n
 
 

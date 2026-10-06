@@ -11,6 +11,8 @@ signal manager_started_using(object_id: String)
 signal manager_started_talking(target: Dictionary)
 ## Algo que merece un aviso en pantalla (un plato que se cae, un crítico...).
 signal announcement(text: String, cell: Vector2i)
+## Se han comprado, movido o vendido muebles.
+signal layout_changed
 
 const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
@@ -36,6 +38,8 @@ const COFFEE_ENERGY := 35.0
 const REPLAN_EVERY := 0.5
 const SIDESTEP_AFTER := 1.5
 const GHOST_AFTER := 4.0
+## Lo que se recupera al vender un mueble (lo comprado en la misma reforma se devuelve entero).
+const RESALE_FRACTION := 0.5
 
 var layout: RestaurantLayout
 var recipes: Dictionary
@@ -64,11 +68,17 @@ var day_stats: Dictionary = {}
 var stains: Dictionary = {}
 ## Veces que alguien ha tenido que "atravesar" a otro por un atasco imposible.
 var forced_passes := 0
+## Quien está cediendo el paso en un pasillo estrecho: clave -> minuto hasta el que espera.
+var _yield_until := {}
 ## Barrio donde está el local ({} si la partida no usa barrios) y sus vecinos.
 var barrio: Dictionary = {}
 var population: Population = null
 ## Cuánto se paga normalmente en el barrio respecto al precio de mercado (1 = normal).
 var price_level := 1.0
+## Modo libre del modo construcción: los muebles no cuestan nada.
+var free_build := false
+## Muebles comprados en la reforma actual (uid -> precio pagado): se devuelven enteros.
+var _bought_this_session := {}
 var _next_group_id := 1
 
 
@@ -81,7 +91,7 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 	ingredients = data["ingredients"]
 	recipes = data["recipes"]
 	var start: Dictionary = data["start"]
-	layout = RestaurantLayout.new(start["local"])
+	layout = RestaurantLayout.new(start["local"], data.get("muebles", {}))
 	demand = Demand.new(data["demand"])
 	finances = Finances.new(float(start["dinero_inicial"]))
 	opening_hour = int(start["hora_apertura"])
@@ -179,6 +189,9 @@ func _ask_to_move_aside(cell: Vector2i, requester_key: String, requester: Mover)
 					and not layout.find_path(cell, c).is_empty() and layout.find_path(cell, c).size() == 2:
 				other.go_to(layout, c)
 				return
+		# Sin hueco al lado (pasillo estrecho): busca uno más lejos, fuera de su camino.
+		if _step_aside_from(other, a[1], requester):
+			other.goal = other.path.back()
 		return
 
 
@@ -198,6 +211,9 @@ func _is_idle(key: String) -> bool:
 func order_manager_walk(cell: Vector2i) -> void:
 	_end_talk()
 	_stop_manager_work()
+	# Si se toca un mueble, va a la casilla libre más cercana.
+	if not layout.can_stand(cell) and cell.x >= 0:
+		cell = layout.nearest_free_cell(cell, manager.mover.last_cell)
 	manager.walk_to(layout, cell, cells_taken_by_others("m"))
 
 
@@ -349,13 +365,16 @@ func _walk(m: Mover, key: String, dt: float) -> void:
 	var previous := m.wait_time
 	m.wait_time += dt
 	# Quien esté parado sin hacer nada en medio se aparta en cuanto alguien quiere pasar.
-	if m.blocked:
+	if m.blocked and not m.path.is_empty():
 		_ask_to_move_aside(m.path[0], key, m)
 	if floori(m.wait_time / REPLAN_EVERY) != floori(previous / REPLAN_EVERY):
 		_unblock(m, key)
 
 
 func _unblock(m: Mover, key: String) -> void:
+	# Está esperando en un hueco a que pase quien venía de frente.
+	if _yield_until.get(key, -1.0) > minutes:
+		return
 	var others := cells_taken_by_others(key)
 	var goal := m.goal
 	# Si alguien está parado justo en su destino (y no es una silla), vale la de al lado.
@@ -369,6 +388,18 @@ func _unblock(m: Mover, key: String) -> void:
 		return
 	if m.try_go_to(layout, goal, others) and (m.path.is_empty() or cell_free_for(m.path[0], key)):
 		return
+	# Cara a cara en un pasillo estrecho: uno cede el paso (si no, los dos retroceden y
+	# avanzan a la vez sin fin). Cede quien tiene menos prioridad: se mete en un hueco
+	# fuera del camino del otro y espera un poco.
+	if m.wait_time >= SIDESTEP_AFTER and m.at_center() and not m.path.is_empty():
+		var blocker := _agent_in(m.path[0], key)
+		if not blocker.is_empty() and _head_on(m, blocker[0]):
+			if not _has_way(key, blocker[1]):
+				if _step_aside_from(m, key, blocker[0]):
+					_yield_until[key] = minutes + 1.5
+				return
+			# Tiene preferencia: espera a que el otro se aparte.
+			return
 	if m.path.is_empty():
 		m.go_to(layout, goal)
 	# Si quien le corta el paso está parado sin hacer nada, le pide que se aparte.
@@ -377,13 +408,70 @@ func _unblock(m: Mover, key: String) -> void:
 	if m.wait_time >= SIDESTEP_AFTER and m.at_center():
 		# Atasco cara a cara: se aparta a una casilla libre de al lado.
 		var sides: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
-		sides.shuffle()
+		# Barajadas con el generador de la partida (para que todo sea reproducible).
+		for i in range(sides.size() - 1, 0, -1):
+			var j := rng.randi_range(0, i)
+			var tmp := sides[i]
+			sides[i] = sides[j]
+			sides[j] = tmp
 		for d in sides:
 			var c := m.last_cell + d
 			if layout.can_stand(c) and cell_free_for(c, key) and not others.has(c):
 				m.path.clear()
 				m.path.append(c)
 				return
+
+
+## Quién (de los demás) ocupa esa casilla: [mover, clave] o [].
+func _agent_in(cell: Vector2i, key: String) -> Array:
+	for a in agents():
+		if a[1] != key and a[0].occupied_cells().has(cell):
+			return a
+	return []
+
+
+## ¿Van de frente? (el otro quiere pasar por donde está `m`)
+func _head_on(m: Mover, other: Mover) -> bool:
+	return other.path.has(m.last_cell) or (other.blocked and not other.path.is_empty() and other.path[0] == m.last_cell)
+
+
+## ¿Tiene `key` preferencia de paso sobre `other_key`? Personal > gestor > clientes.
+func _has_way(key: String, other_key: String) -> bool:
+	var rank := { "s": 3, "m": 2, "g": 1 }
+	var a: int = rank.get(key[0], 0)
+	var b: int = rank.get(other_key[0], 0)
+	return a > b if a != b else key < other_key
+
+
+## Busca la casilla libre más cercana que no esté en el camino de `other` y va hacia ella.
+func _step_aside_from(m: Mover, key: String, other: Mover) -> bool:
+	var in_the_way := {}
+	for c in other.path:
+		in_the_way[c] = true
+	in_the_way[other.last_cell] = true
+	in_the_way[other.goal] = true
+	var came_from := { m.last_cell: m.last_cell }
+	var frontier: Array[Vector2i] = [m.last_cell]
+	while not frontier.is_empty():
+		var c: Vector2i = frontier.pop_front()
+		if c != m.last_cell and not in_the_way.has(c):
+			var route: Array[Vector2i] = []
+			while c != m.last_cell:
+				route.push_front(c)
+				c = came_from[c]
+			m.path = route
+			m.wait_time = 0.0
+			return true
+		if Vector2(c - m.last_cell).length() > 8.0:
+			continue
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if came_from.has(n) or not layout.can_stand(n) or n == layout.spawn_cell:
+				continue
+			if n != other.last_cell and cell_free_for(n, key):
+				came_from[n] = c
+				frontier.append(n)
+	return false
 
 
 ## Cansancio del gestor: se gasta energía, el café la recupera y agotado no puede trabajar.
@@ -453,6 +541,119 @@ func _end_talk() -> void:
 	var who = manager.talking_to.get("entity")
 	if who is StaffMember:
 		who.talking = false
+
+
+# --- Construcción ------------------------------------------------------------
+
+## Empieza una reforma (al entrar en el modo construcción).
+func begin_build_session() -> void:
+	_bought_this_session.clear()
+
+
+func furniture_price(tipo: String) -> float:
+	return float(layout.catalog.get(tipo, {}).get("precio", 0.0))
+
+
+## Celdas con alguien encima (no se puede poner un mueble ahí).
+func people_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for a in agents():
+		cells.append_array(a[0].occupied_cells())
+	return cells
+
+
+## ¿Se puede comprar este mueble y ponerlo aquí? "" si sí, o el motivo.
+func build_problem(tipo: String, cell: Vector2i, rot: int) -> String:
+	if not free_build and finances.money < furniture_price(tipo):
+		return "No hay dinero suficiente"
+	return layout.placement_problem(tipo, cell, rot, -1, people_cells())
+
+
+func buy_furniture(tipo: String, cell: Vector2i, rot: int) -> String:
+	var problem := build_problem(tipo, cell, rot)
+	if problem != "":
+		return problem
+	var price := 0.0 if free_build else furniture_price(tipo)
+	if price > 0.0:
+		finances.spend("muebles", price)
+	var uid := layout.add_furniture(tipo, cell, rot)
+	_bought_this_session[uid] = price
+	_after_layout_change()
+	return ""
+
+
+## Un mueble que no se puede tocar ahora mismo (una mesa con gente...): el motivo, o "".
+func furniture_locked(uid: int) -> String:
+	var t := layout.table_for(uid)
+	if t != null:
+		if t.group != null:
+			return "Hay clientes en esta mesa"
+		if t.cleaner != null:
+			return "La están recogiendo"
+	return ""
+
+
+func move_problem(uid: int, cell: Vector2i, rot: int) -> String:
+	var f := layout.furniture_by_uid(uid)
+	if f.is_empty():
+		return "Ese mueble ya no está"
+	var locked := furniture_locked(uid)
+	if locked != "":
+		return locked
+	return layout.placement_problem(f["tipo"], cell, rot, uid, people_cells())
+
+
+func move_furniture(uid: int, cell: Vector2i, rot: int) -> String:
+	var problem := move_problem(uid, cell, rot)
+	if problem != "":
+		return problem
+	layout.move_furniture(uid, cell, rot)
+	_after_layout_change()
+	return ""
+
+
+## Lo que se recupera al vender este mueble.
+func resale_value(uid: int) -> float:
+	if _bought_this_session.has(uid):
+		return _bought_this_session[uid]
+	var f := layout.furniture_by_uid(uid)
+	if f.is_empty() or free_build:
+		return 0.0
+	return roundf(furniture_price(f["tipo"]) * RESALE_FRACTION)
+
+
+func sell_problem(uid: int) -> String:
+	var locked := furniture_locked(uid)
+	if locked != "":
+		return locked
+	var f := layout.furniture_by_uid(uid)
+	if f.is_empty():
+		return "Ese mueble ya no está"
+	if layout.catalog[f["tipo"]].get("tipo", "") == "mesa" and layout.tables.size() <= 1:
+		return "Necesitas al menos una mesa"
+	return ""
+
+
+func sell_furniture(uid: int) -> String:
+	var problem := sell_problem(uid)
+	if problem != "":
+		return problem
+	var value := resale_value(uid)
+	if value > 0.0:
+		finances.earn("venta_muebles", value)
+	_bought_this_session.erase(uid)
+	layout.remove_furniture(uid)
+	_after_layout_change()
+	return ""
+
+
+## Tras una reforma, quien iba andando recalcula su camino con los muebles nuevos.
+func _after_layout_change() -> void:
+	for a in agents():
+		var m: Mover = a[0]
+		if not m.path.is_empty():
+			m.go_to(layout, m.goal)
+	layout_changed.emit()
 
 
 # --- Clientes ---------------------------------------------------------------

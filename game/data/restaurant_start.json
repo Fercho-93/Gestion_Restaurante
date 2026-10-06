@@ -5,25 +5,28 @@
 	"costes_fijos_dia": { "alquiler": 90, "suministros": 35 },
 	"local": {
 		"tamano": [12, 10],
-		"ambiente": 60,
+		"ambiente": 50,
 		"limpieza": 70,
 		"zonas": [
-			{ "nombre": "Comedor", "rect": [0, 0, 8, 10], "color": "e9c79a" },
+			{ "nombre": "Comedor", "rect": [0, 0, 8, 10], "color": "e9c79a", "construible": true },
 			{ "nombre": "Cocina", "rect": [8, 0, 4, 6], "color": "b9d4d8" },
 			{ "nombre": "Almacén", "rect": [8, 6, 4, 2], "color": "c9c0b4", "bloqueada": true },
-			{ "nombre": "Despacho", "rect": [8, 8, 4, 2], "color": "d9bf9b" }
+			{ "nombre": "Despacho", "rect": [8, 8, 4, 2], "color": "d9bf9b", "construible": true }
 		],
 		"objetos": [
 			{ "id": "ordenador", "nombre": "Ordenador", "celda": [10, 9], "uso": [9, 9] },
 			{ "id": "cafetera", "nombre": "Cafetera", "celda": [8, 1], "uso": [7, 1], "sentado": false }
 		],
-		"mesas": [
-			{ "celda": [2, 2], "plazas": 4 },
-			{ "celda": [5, 2], "plazas": 4 },
-			{ "celda": [2, 5], "plazas": 2 },
-			{ "celda": [5, 5], "plazas": 4 },
-			{ "celda": [2, 8], "plazas": 2 },
-			{ "celda": [5, 8], "plazas": 2 }
+		"muebles": [
+			{ "tipo": "mesa_4", "celda": [2, 2] },
+			{ "tipo": "mesa_4", "celda": [5, 2] },
+			{ "tipo": "mesa_2", "celda": [2, 5] },
+			{ "tipo": "mesa_4", "celda": [5, 5] },
+			{ "tipo": "mesa_2", "celda": [2, 8] },
+			{ "tipo": "mesa_2", "celda": [5, 8] },
+			{ "tipo": "ficus", "celda": [0, 0] },
+			{ "tipo": "lampara_pie", "celda": [9, 8] },
+			{ "tipo": "planta_pequena", "celda": [10, 8] }
 		],
 		"barra_cocina": [[8, 0], [8, 1], [8, 2], [8, 3], [8, 4]],
 		"puerta_cocina": [8, 5],

@@ -1,0 +1,52 @@
+[
+	{
+		"id": "mesa_2", "nombre": "Mesa de 2", "categoria": "mesas", "tipo": "mesa", "plazas": 2,
+		"precio": 180, "ambiente": 0, "comodidad": 50, "estilo": "madera",
+		"descripcion": "Mesa sencilla de madera con dos sillas."
+	},
+	{
+		"id": "mesa_4", "nombre": "Mesa de 4", "categoria": "mesas", "tipo": "mesa", "plazas": 4,
+		"precio": 260, "ambiente": 0, "comodidad": 50, "estilo": "madera",
+		"descripcion": "Mesa cuadrada de madera con cuatro sillas."
+	},
+	{
+		"id": "mesa_2_elegante", "nombre": "Mesa elegante de 2", "categoria": "mesas", "tipo": "mesa", "plazas": 2,
+		"precio": 420, "ambiente": 2, "comodidad": 75, "estilo": "elegante",
+		"descripcion": "Mantel blanco y sillas tapizadas. Más cómoda y vistosa."
+	},
+	{
+		"id": "mesa_4_elegante", "nombre": "Mesa elegante de 4", "categoria": "mesas", "tipo": "mesa", "plazas": 4,
+		"precio": 600, "ambiente": 3, "comodidad": 75, "estilo": "elegante",
+		"descripcion": "Mantel blanco y sillas tapizadas. Más cómoda y vistosa."
+	},
+	{
+		"id": "planta_pequena", "nombre": "Planta en maceta", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 35, "ambiente": 2, "estilo": "planta",
+		"descripcion": "Un toque verde que alegra el local."
+	},
+	{
+		"id": "ficus", "nombre": "Ficus grande", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 90, "ambiente": 4, "estilo": "ficus",
+		"descripcion": "Planta alta y frondosa. Da mucha vida a una esquina."
+	},
+	{
+		"id": "estanteria", "nombre": "Estantería con libros", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 220, "ambiente": 4, "estilo": "estanteria", "huella": [[0, 0], [1, 0]],
+		"descripcion": "Libros y cacharros: el local se siente más acogedor."
+	},
+	{
+		"id": "acuario", "nombre": "Acuario", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 650, "ambiente": 8, "estilo": "acuario", "huella": [[0, 0], [1, 0]],
+		"descripcion": "Peces de colores. A los clientes (y a los niños) les encanta."
+	},
+	{
+		"id": "lampara_pie", "nombre": "Lámpara de pie", "categoria": "luces", "tipo": "decoracion",
+		"precio": 120, "ambiente": 3, "estilo": "lampara",
+		"descripcion": "Luz cálida y suave alrededor."
+	},
+	{
+		"id": "farolillo", "nombre": "Farolillo", "categoria": "luces", "tipo": "decoracion",
+		"precio": 70, "ambiente": 2, "estilo": "farolillo",
+		"descripcion": "Mesita con un farolillo encendido. Íntimo y barato."
+	}
+]

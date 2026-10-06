@@ -33,6 +33,8 @@ func _initialize() -> void:
 	test_barrios_play_differently()
 	test_profiles_change_behavior()
 	test_person_sheet()
+	test_build_furniture()
+	test_cluttered_layout_never_gets_stuck()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -111,7 +113,8 @@ func test_recipe_cost() -> void:
 
 
 func test_layout_paths_avoid_tables() -> void:
-	var layout := RestaurantLayout.new(load_data()["start"]["local"])
+	var data := load_data()
+	var layout := RestaurantLayout.new(data["start"]["local"], data["muebles"])
 	check(layout.tables.size() == 6, "seis mesas")
 	for table in layout.tables:
 		check(not layout.can_stand(table.cell), "la mesa bloquea el paso")
@@ -126,7 +129,8 @@ func test_layout_paths_avoid_tables() -> void:
 
 
 func test_mover_reaches_target() -> void:
-	var layout := RestaurantLayout.new(load_data()["start"]["local"])
+	var data := load_data()
+	var layout := RestaurantLayout.new(data["start"]["local"], data["muebles"])
 	var mover := Mover.new(layout.spawn_cell, 4.0)
 	mover.go_to(layout, layout.tables[0].seats[0])
 	for i in 400:
@@ -286,10 +290,10 @@ func test_manager_walks_and_uses_computer() -> void:
 	check(m.mover.cell() == layout.manager_home, "el gestor empieza en su sitio")
 	check(layout.zone_name_at(layout.objects["ordenador"]["uso"]) == "Despacho", "el ordenador está en el despacho")
 	# Andar a una celda libre.
-	sim.order_manager_walk(Vector2i(0, 0))
+	sim.order_manager_walk(Vector2i(1, 0))
 	for i in 200:
 		sim.update(0.25)
-	check(m.mover.cell() == Vector2i(0, 0) and m.state == Manager.State.LIBRE, "el gestor llega adonde se le manda")
+	check(m.mover.cell() == Vector2i(1, 0) and m.state == Manager.State.LIBRE, "el gestor llega adonde se le manda")
 	# Mandarlo a una mesa o a una silla: se queda al lado.
 	var table: RestaurantLayout.Table = layout.tables[0]
 	sim.order_manager_walk(table.seats[0])
@@ -317,7 +321,7 @@ func test_manager_avoids_obstacles() -> void:
 	var layout := sim.layout
 	var m := sim.manager
 	# Cruzar el local de punta a punta: nunca pisa mesas, sillas ni muebles.
-	for target in [Vector2i(0, 9), Vector2i(7, 3), Vector2i(0, 0), Vector2i(10, 2), Vector2i(9, 8)]:
+	for target in [Vector2i(0, 9), Vector2i(7, 3), Vector2i(1, 0), Vector2i(10, 2), Vector2i(8, 8)]:
 		sim.order_manager_walk(target)
 		var ok := true
 		for i in 400:
@@ -340,7 +344,7 @@ func test_nobody_walks_through_anything() -> void:
 	var report := {}
 	sim.day_closed.connect(func(r: Dictionary): report.merge(r))
 	# Además, el gestor da vueltas por el comedor entre la gente.
-	var walks: Array[Vector2i] = [Vector2i(0, 0), Vector2i(7, 9), Vector2i(7, 0), Vector2i(0, 9), Vector2i(10, 3)]
+	var walks: Array[Vector2i] = [Vector2i(1, 0), Vector2i(7, 9), Vector2i(7, 0), Vector2i(0, 9), Vector2i(10, 3)]
 	var tick := 0
 	while sim.minutes < 24 * 60 + 60:
 		if tick % 200 == 0:
@@ -543,7 +547,7 @@ func test_manager_works_and_cleaning() -> void:
 	check(sim.free_table_for(g) != table, "una mesa sucia no se puede ocupar")
 	# Recoger la mesa y fregar una mancha.
 	var free_cells: Array[Vector2i] = []
-	for c in [Vector2i(0, 0), Vector2i(0, 1), Vector2i(0, 3), Vector2i(0, 4), Vector2i(0, 6)]:
+	for c in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(0, 3), Vector2i(0, 4), Vector2i(0, 6)]:
 		if not sim.stains.has(c):
 			free_cells.append(c)
 	sim.stains[free_cells[0]] = null
@@ -900,3 +904,113 @@ func test_person_sheet() -> void:
 	check(PersonSheet.build({ "entity": g, "member": 1 }, sim)["perfil"] == "Cliente", "acompañante anónimo")
 	check(PersonSheet.build({ "entity": sim.staff[0], "member": 0 }, sim)["necesidades"].size() == 4, "ficha de empleado")
 	check(PersonSheet.build({ "entity": sim.manager, "member": 0 }, sim)["necesidades"][0][0] == "Energía", "ficha del gestor")
+
+
+func test_build_furniture() -> void:
+	var sim := RestaurantSim.new(load_data(), 9 * 60, 31)
+	var layout := sim.layout
+	check(layout.accessibility_problem() == "", "el local inicial es accesible")
+	check(layout.tables.size() == 6, "seis mesas iniciales")
+	var money := sim.finances.money
+	var ambience := layout.ambiente
+	# Una planta: cuesta dinero, sube el ambiente y bloquea su casilla.
+	var spot := Vector2i(0, 4)
+	check(sim.build_problem("ficus", spot, 0) == "", "se puede poner un ficus en %s: %s" % [spot, sim.build_problem("ficus", spot, 0)])
+	check(sim.buy_furniture("ficus", spot, 0) == "", "comprar un ficus")
+	check(is_equal_approx(sim.finances.money, money - 90.0), "el ficus cuesta 90 €")
+	check(layout.ambiente > ambience, "el ficus sube el ambiente")
+	check(not layout.can_stand(spot), "nadie atraviesa el ficus")
+	# No se puede poner encima de otro mueble, ni en la cocina, ni en un puesto reservado.
+	check(sim.build_problem("planta_pequena", spot, 0) != "", "no encima de otro mueble")
+	check(sim.build_problem("planta_pequena", Vector2i(2, 2), 0) != "", "no encima de una mesa")
+	check(sim.build_problem("planta_pequena", Vector2i(1, 2), 0) != "", "no encima de una silla")
+	check(sim.build_problem("planta_pequena", Vector2i(10, 2), 0) != "", "no en la cocina")
+	check(sim.build_problem("planta_pequena", layout.pass_cell, 0) != "", "no en el pase")
+	# No se puede tapar el paso: un muro de plantas que cierra el comedor se rechaza.
+	var wall: Array[int] = []
+	for y in 10:
+		if sim.buy_furniture("planta_pequena", Vector2i(7, y), 0) == "":
+			wall.append(layout.furniture_at(Vector2i(7, y))["uid"])
+	check(wall.size() < 10, "no deja cerrar el comedor con plantas")
+	check(layout.accessibility_problem() == "", "nunca se llega a cortar el paso")
+	for w in wall:
+		sim.sell_furniture(w)
+	# Una mesa nueva: aparece con sus sillas y su sitio para el camarero.
+	sim.free_build = true
+	var before_money := sim.finances.money
+	var table_spot := Vector2i(0, 6)
+	var problem := sim.build_problem("mesa_2", table_spot, 1)
+	if problem == "":
+		check(sim.buy_furniture("mesa_2", table_spot, 1) == "", "comprar una mesa en modo libre")
+		var t := layout.table_at(table_spot)
+		check(t != null and t.seats.size() == 2, "la mesa nueva tiene dos sillas")
+		check(t.seats.has(table_spot + Vector2i(0, 1)) and t.seats.has(table_spot + Vector2i(0, -1)), "girada, las sillas van arriba y abajo")
+		check(layout.is_sittable(t.seats[0]) and t.service_cell != Vector2i(-999, -999), "sillas y sitio de servicio")
+		# (Junto a la entrada estorba: se vende y se recupera lo pagado, que fue nada.)
+		check(sim.sell_furniture(t.uid) == "", "vender la mesa nueva")
+	check(is_equal_approx(sim.finances.money, before_money), "en modo libre no cuesta nada")
+	sim.free_build = false
+	# Mover una mesa ocupada no se puede; una libre sí, conservando su estado.
+	var t0 := layout.tables[0]
+	var uid := t0.uid
+	var g := _seated_group(sim, 77, 2, 0)
+	check(sim.move_problem(uid, Vector2i(2, 3), 0) != "", "no se mueve una mesa con clientes")
+	check(sim.sell_problem(uid) != "", "ni se vende")
+	t0.group = null
+	sim.groups.erase(g)
+	t0.dirty = true
+	var target := Vector2i(1, 2)
+	var move_problem := sim.move_problem(uid, target, 0)
+	if move_problem == "":
+		check(sim.move_furniture(uid, target, 0) == "", "mover una mesa libre")
+		check(layout.table_for(uid) == t0 and t0.cell == target and t0.dirty, "es la misma mesa, sigue sucia y en su sitio nuevo")
+	else:
+		check(false, "no se pudo mover la mesa: " + move_problem)
+	# Vender: lo comprado en esta reforma se devuelve entero; lo antiguo, la mitad.
+	var ficus_uid: int = layout.furniture_at(spot)["uid"]
+	var m1 := sim.finances.money
+	check(sim.sell_furniture(ficus_uid) == "", "vender el ficus")
+	check(is_equal_approx(sim.finances.money, m1 + 90.0), "devuelve todo lo pagado en la misma reforma")
+	check(layout.can_stand(spot), "su casilla queda libre")
+	sim.begin_build_session()
+	var lamp: Dictionary = {}
+	for f in layout.furniture:
+		if f["tipo"] == "lampara_pie":
+			lamp = f
+	var m2 := sim.finances.money
+	check(sim.sell_furniture(lamp["uid"]) == "", "vender la lámpara")
+	check(is_equal_approx(sim.finances.money, m2 + 60.0), "lo antiguo se vende a mitad de precio")
+	# No se puede poner nada donde hay alguien.
+	sim.manager.mover = Mover.new(Vector2i(1, 9))
+	check(sim.build_problem("planta_pequena", Vector2i(1, 9), 0) == "Hay alguien en medio", "no encima de una persona")
+	# Tras la reforma la simulación sigue funcionando: un día entero sin atascos imposibles.
+	var report := {}
+	sim.day_closed.connect(func(r: Dictionary): report.merge(r))
+	while sim.minutes < 24 * 60 + 60:
+		sim.update(0.25)
+	check(report.get("clientes_servidos", 0) > 20, "con los muebles cambiados se sigue sirviendo (%d)" % report.get("clientes_servidos", 0))
+
+
+## Con el local lleno de plantas puestas al azar (pasillos estrechos), el servicio puede ir
+## peor, pero nadie se queda atascado para siempre: a las 3:00 se han ido todos.
+func test_cluttered_layout_never_gets_stuck() -> void:
+	for seed_value in [2, 4]:
+		var sim := RestaurantSim.new(load_data("alternativo"), 11 * 60, seed_value)
+		sim.free_build = true
+		var r := RandomNumberGenerator.new()
+		r.seed = seed_value
+		var placed := 0
+		var cells: Array = sim.layout.buildable.keys()
+		for i in 60:
+			var c: Vector2i = cells[r.randi() % cells.size()]
+			if sim.buy_furniture(["planta_pequena", "ficus", "lampara_pie"][i % 3], c, 0) == "":
+				placed += 1
+			if placed >= 8:
+				break
+		check(placed == 8 and sim.layout.accessibility_problem() == "", "ocho plantas puestas y todo accesible")
+		var report := {}
+		sim.day_closed.connect(func(rep: Dictionary): report.merge(rep))
+		while sim.minutes < 24 * 60 + 3 * 60:
+			sim.update(0.25)
+		check(sim.groups.is_empty(), "local abarrotado (semilla %d): a las 3:00 no queda nadie atascado (%d grupos)" % [seed_value, sim.groups.size()])
+		check(report.get("clientes_servidos", 0) > 10, "y se ha servido a gente (%d)" % report.get("clientes_servidos", 0))

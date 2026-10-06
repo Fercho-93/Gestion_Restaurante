@@ -157,6 +157,34 @@ Plan para escalar la IA (siguientes fases):
 - **Licencias**: apertura, terraza, alcohol, música. Tienen plazos y costes.
 
 ### 5.3 Distribución y decoración (editor isométrico)
+
+**Dos visiones que comparten el mismo restaurante** (como en los Sims): el *modo
+construcción* (con el tiempo parado se monta el local) y el *modo vivir* (se ve cómo la
+gente usa lo que has montado). Lo que construyes cambia cómo se mueve y cómo se siente la
+gente, y verlo funcionar te dice qué cambiar.
+
+Plan por pasos:
+1. ✅ **Muebles**: catálogo en barra inferior con pestañas (Mesas, Decoración, Luces) y
+   miniaturas 3D; tocar para elegir, tocar el suelo para situar el "fantasma" (verde si
+   se puede, rojo con el motivo si no), girar, comprar, mover y vender. No deja tapar el
+   paso (comprueba que se llega a todas las mesas, sillas, pase, puestos y objetos) ni
+   poner nada encima de alguien o de una mesa ocupada. Construir cuesta dinero, con un
+   *modo libre* gratis para probar; lo comprado en la misma reforma se devuelve entero
+   al venderlo y lo antiguo a mitad de precio. Al salir, la gente recalcula sus caminos.
+2. **Objetos inteligentes** y ambiente por mesa y zona: cada objeto anuncia lo que aporta
+   (comodidad, ambiente, luz…) y la gente reacciona a lo que tiene cerca; desgaste y
+   averías.
+3. **Paredes, puertas, suelos** y detección de habitaciones (comedor, cocina, aseos,
+   almacén, sala de personal).
+4. **Nuevas necesidades**: aseos para clientes, sala de descanso para el personal.
+5. **Vida visual**: día y noche, luces, fachada y calle según el barrio, sonido.
+6. **Empezar de cero**: elegir un local vacío del barrio (tamaño, forma, precio) y montarlo.
+
+Lo aprendido en el paso 1: los pasillos de una casilla provocaban atascos sin fin. Ahora,
+cuando dos personas se encuentran de frente en un pasillo estrecho, una cede el paso
+(personal > gestor > clientes) metiéndose en un hueco fuera del camino del otro, y quien
+está parado sin hacer nada busca un hueco aunque no esté justo al lado.
+
 - Rejilla isométrica. Zonas: comedor, cocina, almacén, cámara frigorífica, barra,
   baños, terraza, vestuario.
 - **Mobiliario y equipamiento** con: precio, calidad, capacidad, consumo eléctrico,
@@ -379,7 +407,11 @@ Hito 1 en curso:
   y datos del barrio en el resumen del ordenador. En una semana simulada el barrio
   universitario ya da beneficio (alquiler barato) y el acomodado pierde dinero hasta
   que se suban los precios: hace falta Carta y precios.
-- Siguiente: Carta y precios (primer módulo de gestión del ordenador).
+- ✅ Modo construcción, paso 1 (apartado 5.3): comprar, colocar, girar, mover y vender
+  mesas y decoración, con avisos y sin poder tapar el paso. El ambiente del local sale de
+  los muebles. Tráfico más robusto en pasillos estrechos.
+- Siguiente (por decisión del jugador, antes que la gestión): paso 2 del modo
+  construcción, objetos inteligentes y ambiente por mesa y zona.
 
 ## 11. Pendiente de decidir
 
