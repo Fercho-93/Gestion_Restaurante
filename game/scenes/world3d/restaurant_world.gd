@@ -100,8 +100,8 @@ func _process(delta: float) -> void:
 
 func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
 	var m := g.members[member_index]
-	var moving := m.is_moving()
-	var seated := not moving and g.table != null and g.state != CustomerGroup.State.YENDO_A_MESA
+	var moving := m.is_moving() and not m.blocked
+	var seated := m.arrived() and g.table != null and sim.layout.is_sittable(m.last_cell)
 	bot.entity = g
 	bot.position = to_world(m.pos if seated else m.pos + m.jitter)
 	bot.pose = Bot.Pose.SENTADO if seated else (Bot.Pose.ANDANDO if moving else Bot.Pose.DE_PIE)
@@ -130,7 +130,7 @@ func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
 
 
 func _sync_staff(bot: Bot, s: StaffMember) -> void:
-	var moving := s.mover.is_moving()
+	var moving := s.mover.is_moving() and not s.mover.blocked
 	bot.entity = s
 	bot.position = to_world(s.mover.pos)
 	bot.carrying = s.is_carrying_food()
@@ -176,7 +176,7 @@ func _update_gestor(delta: float) -> void:
 	var m := sim.manager
 	_gestor.position = to_world(m.mover.pos)
 	_gestor.eyes = Bot.Eyes.FELIZ
-	if m.mover.is_moving():
+	if m.mover.is_moving() and not m.mover.blocked:
 		_gestor.pose = Bot.Pose.ANDANDO
 		_gestor.face_direction(to_world(m.mover.facing))
 	elif m.state == Manager.State.USANDO:

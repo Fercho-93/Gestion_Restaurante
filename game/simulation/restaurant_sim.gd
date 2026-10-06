@@ -17,6 +17,11 @@ const RESTOCK_HOUR := 11
 const WAITER_ACTION_TIME := { "pedido": 1.5, "servir": 0.5, "cobrar": 1.5, "recoger": 0.5 }
 ## Prioridad de las tareas del camarero (menor = antes).
 const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "pedido": 2 }
+## Tráfico: si alguien no puede avanzar, cada tanto busca otro camino; si sigue
+## atascado, se aparta a un lado; y como último recurso pasa igualmente.
+const REPLAN_EVERY := 0.5
+const SIDESTEP_AFTER := 1.5
+const GHOST_AFTER := 4.0
 
 var layout: RestaurantLayout
 var recipes: Dictionary
@@ -41,6 +46,8 @@ var rng := RandomNumberGenerator.new()
 ## Reloj absoluto en minutos de juego.
 var minutes := 0.0
 var day_stats: Dictionary = {}
+## Veces que alguien ha tenido que "atravesar" a otro por un atasco imposible.
+var forced_passes := 0
 var _next_group_id := 1
 
 
@@ -65,12 +72,12 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 	var waiter_count := 0
 	var cook_count := 0
 	for d in start["personal"]:
-		var cell := layout.waiter_home
+		var cell: Vector2i
 		if d["puesto"] == StaffMember.ROLE_COOK:
 			cell = layout.cook_stations[cook_count % layout.cook_stations.size()]
 			cook_count += 1
 		else:
-			cell += Vector2i(0, waiter_count)
+			cell = layout.waiter_homes[waiter_count % layout.waiter_homes.size()]
 			waiter_count += 1
 		staff.append(StaffMember.new(d, staff.size() + 1, cell))
 	manager = Manager.new(layout.manager_home)
@@ -122,16 +129,47 @@ func average_stars() -> float:
 	return 1.0 + reputation * 4.0
 
 
+## Quien está parado sin hacer nada en `cell` se aparta a una casilla libre de al lado
+## que no esté en el camino de `requester`.
+func _ask_to_move_aside(cell: Vector2i, requester_key: String, requester: Mover) -> void:
+	for a in agents():
+		var other: Mover = a[0]
+		if a[1] == requester_key or other.last_cell != cell or not other.arrived() or not _is_idle(a[1]):
+			continue
+		var in_the_way := requester.path.slice(0, 4)
+		in_the_way.append(requester.last_cell)
+		var sides: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
+				Vector2i(1, 1), Vector2i(-1, 1), Vector2i(1, -1), Vector2i(-1, -1)]
+		for d in sides:
+			var c := cell + d
+			if layout.can_stand(c) and not in_the_way.has(c) and cell_free_for(c, a[1]) \
+					and not layout.find_path(cell, c).is_empty() and layout.find_path(cell, c).size() == 2:
+				other.go_to(layout, c)
+				return
+		return
+
+
+## ¿Está esa persona parada sin nada que hacer (y por tanto puede apartarse)?
+func _is_idle(key: String) -> bool:
+	if key == "m":
+		return manager.state == Manager.State.LIBRE
+	if key.begins_with("s"):
+		for s in staff:
+			if "s%d" % s.id == key:
+				return s.puesto == StaffMember.ROLE_WAITER and s.task.is_empty() and not s.talking
+	return false
+
+
 # --- Gestor -----------------------------------------------------------------
 
 func order_manager_walk(cell: Vector2i) -> void:
 	_end_talk()
-	manager.walk_to(layout, cell, occupied_cells())
+	manager.walk_to(layout, cell, cells_taken_by_others("m"))
 
 
 func order_manager_use(object_id: String) -> void:
 	_end_talk()
-	manager.go_use(layout, object_id, occupied_cells())
+	manager.go_use(layout, object_id, cells_taken_by_others("m"))
 
 
 ## Ir a hablar con alguien: entity es un CustomerGroup (con el índice del miembro) o un
@@ -141,7 +179,7 @@ func order_manager_talk(entity, member: int = 0) -> void:
 	var target := { "entity": entity, "member": member }
 	var cell = person_cell(target)
 	if cell != null:
-		manager.go_talk(layout, target, cell, occupied_cells(target))
+		manager.go_talk(layout, target, cell, cells_taken_by_others("m"))
 
 
 ## El gestor deja lo que estaba haciendo (levantarse, terminar la conversación).
@@ -154,28 +192,130 @@ func stop_manager() -> void:
 func person_cell(target: Dictionary):
 	var e = target["entity"]
 	if e is StaffMember:
-		return e.mover.cell() if staff.has(e) else null
+		return e.mover.last_cell if staff.has(e) else null
 	if e is CustomerGroup:
 		if not groups.has(e) or e.state == CustomerGroup.State.FUERA:
 			return null
-		return e.members[target["member"]].cell()
+		return e.members[target["member"]].last_cell
 	return null
 
 
-## Celdas ocupadas por personas (para que el gestor no las atraviese).
-func occupied_cells(except: Dictionary = {}) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
+# --- Tráfico: nadie atraviesa a nadie ---------------------------------------------
+
+## Todas las personas que se mueven por el local: [mover, clave]. Los miembros de un
+## mismo grupo comparten clave y pueden ir juntos.
+func agents() -> Array:
+	var list := [[manager.mover, "m"]]
 	for s in staff:
-		if except.get("entity") != s:
-			cells.append(s.mover.cell())
+		list.append([s.mover, "s%d" % s.id])
 	for g in groups:
-		for i in g.members.size():
-			if except.get("entity") != g or except.get("member") != i:
-				cells.append(g.members[i].cell())
+		for m in g.members:
+			list.append([m, "g%d" % g.id])
+	return list
+
+
+## Casillas ocupadas (o reservadas al ir de camino) por todos menos `key`.
+func cells_taken_by_others(key: String) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for a in agents():
+		if a[1] != key:
+			cells.append_array(a[0].occupied_cells())
 	return cells
 
 
+## ¿Puede `key` entrar en la casilla? La entrada/salida de la calle no cuenta.
+## `swap_from`: si se indica, se permite cruzarse con quien quiere ir justo a esa casilla
+## (dos personas que se encuentran de frente se intercambian el sitio).
+func cell_free_for(cell: Vector2i, key: String, swap_from: Variant = null) -> bool:
+	if cell == layout.spawn_cell:
+		return true
+	for a in agents():
+		if a[1] == key:
+			continue
+		var other: Mover = a[0]
+		if not other.occupied_cells().has(cell):
+			continue
+		if swap_from != null and other.is_moving() and other.last_cell == cell and other.path[0] == swap_from:
+			continue
+		return false
+	return true
+
+
+## ¿Cortaría el paso en diagonal de `from` a `to` al de alguien que hace la diagonal
+## contraria? (no pisarían la misma casilla, pero se atravesarían por el medio)
+func crosses_diagonal(from: Vector2i, to: Vector2i, key: String) -> bool:
+	var d := to - from
+	if d.x == 0 or d.y == 0:
+		return false
+	var corner_a := from + Vector2i(d.x, 0)
+	var corner_b := from + Vector2i(0, d.y)
+	for a in agents():
+		if a[1] == key:
+			continue
+		var other: Mover = a[0]
+		if other.is_moving() and not other.at_center():
+			if (other.last_cell == corner_a and other.path[0] == corner_b) or (other.last_cell == corner_b and other.path[0] == corner_a):
+				return true
+	return false
+
+
+## Hace caminar a alguien respetando a los demás y resolviendo atascos.
+func _walk(m: Mover, key: String, dt: float) -> void:
+	if m.arrived():
+		m.wait_time = 0.0
+		return
+	var before := m.pos
+	if m.is_moving():
+		m.step(dt, func(c: Vector2i) -> bool:
+			return cell_free_for(c, key, m.last_cell if m.ghost else null) and not crosses_diagonal(m.last_cell, c, key))
+	if m.pos != before:
+		m.wait_time = 0.0
+		return
+	var previous := m.wait_time
+	m.wait_time += dt
+	# Quien esté parado sin hacer nada en medio se aparta en cuanto alguien quiere pasar.
+	if m.blocked:
+		_ask_to_move_aside(m.path[0], key, m)
+	if floori(m.wait_time / REPLAN_EVERY) != floori(previous / REPLAN_EVERY):
+		_unblock(m, key)
+
+
+func _unblock(m: Mover, key: String) -> void:
+	var others := cells_taken_by_others(key)
+	var goal := m.goal
+	# Si alguien está parado justo en su destino (y no es una silla), vale la de al lado.
+	if others.has(goal) and goal != layout.spawn_cell and not layout.is_sittable(goal):
+		goal = layout.nearest_free_cell(goal, m.last_cell, others)
+	if m.wait_time >= GHOST_AFTER and not m.ghost:
+		if m.path.is_empty():
+			m.go_to(layout, goal)
+		m.ghost = true
+		forced_passes += 1
+		return
+	if m.try_go_to(layout, goal, others) and (m.path.is_empty() or cell_free_for(m.path[0], key)):
+		return
+	if m.path.is_empty():
+		m.go_to(layout, goal)
+	# Si quien le corta el paso está parado sin hacer nada, le pide que se aparte.
+	if not m.path.is_empty():
+		_ask_to_move_aside(m.path[0], key, m)
+	if m.wait_time >= SIDESTEP_AFTER and m.at_center():
+		# Atasco cara a cara: se aparta a una casilla libre de al lado.
+		var sides: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+		sides.shuffle()
+		for d in sides:
+			var c := m.last_cell + d
+			if layout.can_stand(c) and cell_free_for(c, key) and not others.has(c):
+				m.path.clear()
+				m.path.append(c)
+				return
+
+
 func _update_manager(dt: float) -> void:
+	# Si le han pedido paso estando libre, se aparta.
+	if manager.state == Manager.State.LIBRE and manager.mover.is_moving():
+		_walk(manager.mover, "m", dt)
+		return
 	var target: Dictionary = manager.talk_target
 	if manager.state == Manager.State.HABLANDO:
 		target = manager.talking_to
@@ -183,7 +323,10 @@ func _update_manager(dt: float) -> void:
 			stop_manager()
 			manager.notice = "Se ha ido"
 			return
-	var event := manager.step(dt, layout, occupied_cells(target), person_cell(target) if not target.is_empty() else null)
+	var can_enter := func(c: Vector2i) -> bool:
+		return cell_free_for(c, "m") and not crosses_diagonal(manager.mover.last_cell, c, "m")
+	var event := manager.step(dt, layout, cells_taken_by_others("m"), can_enter,
+			person_cell(target) if not target.is_empty() else null)
 	if event.has("usar"):
 		manager_started_using.emit(event["usar"])
 	elif event.has("hablar"):
@@ -223,7 +366,7 @@ func _update_groups(dt: float) -> void:
 	for g in groups:
 		g.state_time += dt
 		for m in g.members:
-			m.step(dt)
+			_walk(m, "g%d" % g.id, dt)
 		match g.state:
 			CustomerGroup.State.LLEGANDO:
 				if g.all_arrived():
@@ -313,12 +456,13 @@ func _update_waiters(dt: float) -> void:
 	for w in waiters():
 		if w.talking:
 			continue
-		w.mover.step(dt)
+		_walk(w.mover, "s%d" % w.id, dt)
 		if w.task.is_empty():
 			_assign_waiter_task(w)
 		if w.task.is_empty():
-			if not w.mover.is_moving() and w.mover.cell() != layout.waiter_home:
-				w.mover.go_to(layout, layout.waiter_home)
+			# Vuelve a su sitio, si no se lo ha ocupado nadie.
+			if w.mover.arrived() and w.mover.last_cell != w.home and cell_free_for(w.home, "s%d" % w.id):
+				w.mover.go_to(layout, w.home)
 		else:
 			_progress_waiter_task(w, dt)
 
@@ -361,7 +505,7 @@ func _progress_waiter_task(w: StaffMember, dt: float) -> void:
 		return
 	match w.task["fase"]:
 		"ir_pase":
-			if not w.mover.is_moving():
+			if w.mover.arrived():
 				w.task["fase"] = "recoger"
 				w.task["tiempo"] = WAITER_ACTION_TIME["recoger"] / w.speed_factor()
 		"recoger":
@@ -370,7 +514,7 @@ func _progress_waiter_task(w: StaffMember, dt: float) -> void:
 				w.task["fase"] = "ir_mesa"
 				w.mover.go_to(layout, g.table.service_cell)
 		"ir_mesa":
-			if not w.mover.is_moving():
+			if w.mover.arrived():
 				w.task["fase"] = "atender"
 				w.task["tiempo"] = WAITER_ACTION_TIME[w.task["tipo"]] / w.speed_factor()
 		"atender":

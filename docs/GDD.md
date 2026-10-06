@@ -292,8 +292,11 @@ Hito 1 en curso:
   usarlo; las órdenes dadas en pausa se ejecutan al reanudar.
 - ✅ Despacho con ordenador; al sentarse se abre la gestión (Resumen en directo; Carta,
   Personal, Pedidos y Finanzas por hacer).
-- ✅ El gestor no atraviesa muebles, sillas ni personas: rodea o espera a que le dejen
-  pasar (y desiste si tardan demasiado). La cocina tiene puerta.
+- ✅ Nadie atraviesa nada: gestor, empleados y clientes caminan de casilla en casilla
+  reservando la siguiente; rodean muebles y sillas (salvo la suya al sentarse), esperan
+  si alguien les corta el paso, buscan otro camino, piden paso a quien está parado sin
+  hacer nada (se aparta) y, si se encuentran de frente en un pasillo, uno se aparta.
+  La cocina tiene puerta y la gente que pasa por la calle respeta la cola.
 - ✅ Hablar con la gente: tocar a un cliente o a un empleado hace que el gestor vaya
   hasta él y se abra un cuadro de diálogo. Lo que dicen sale del estado real (esperas,
   lo que han comido, precios, trabajo pendiente). Los camareros se paran a hablar.

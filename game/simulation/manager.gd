@@ -37,7 +37,7 @@ func _init(start: Vector2i) -> void:
 
 func walk_to(layout: RestaurantLayout, cell: Vector2i, occupied: Array[Vector2i]) -> void:
 	_reset()
-	_set_destination(layout, layout.nearest_manager_cell(cell, mover.cell(), occupied), occupied)
+	_set_destination(layout, layout.nearest_free_cell(cell, mover.last_cell, occupied), occupied)
 
 
 func go_use(layout: RestaurantLayout, object_id: String, occupied: Array[Vector2i]) -> void:
@@ -49,49 +49,55 @@ func go_use(layout: RestaurantLayout, object_id: String, occupied: Array[Vector2
 func go_talk(layout: RestaurantLayout, target: Dictionary, target_cell: Vector2i, occupied: Array[Vector2i]) -> void:
 	_reset()
 	talk_target = target
-	_set_destination(layout, layout.nearest_manager_cell(target_cell, mover.cell(), occupied), occupied)
+	_set_destination(layout, layout.nearest_free_cell(target_cell, mover.last_cell, occupied), occupied)
 
 
 ## Deja lo que esté haciendo (levantarse del ordenador, terminar una conversación...).
 func stop() -> void:
 	_reset()
-	mover.path.clear()
+	mover.halt()
 
 
-## Avanza `minutes`. `occupied`: celdas con personas. `target_cell`: dónde está ahora la
-## persona con la que va a hablar (null si ya no está). Devuelve lo que empieza a hacer:
+## Avanza `minutes`. `occupied`: celdas con otras personas. `can_enter(cell)`: si puede
+## entrar en una casilla. `target_cell`: dónde está ahora la persona con la que va a
+## hablar (null si ya no está). Devuelve lo que empieza a hacer:
 ## {"usar": id} o {"hablar": {entity, member}} o {} si nada nuevo.
-func step(minutes: float, layout: RestaurantLayout, occupied: Array[Vector2i], target_cell = null) -> Dictionary:
+func step(minutes: float, layout: RestaurantLayout, occupied: Array[Vector2i], can_enter: Callable, target_cell = null) -> Dictionary:
 	if state != State.ANDANDO:
 		return {}
 	if not talk_target.is_empty():
 		if target_cell == null:
 			_reset()
+			mover.halt()
 			notice = "Se ha ido antes de que llegaras"
 			return {}
-		if mover.pos.distance_to(Vector2(target_cell)) <= TALK_DISTANCE:
-			mover.path.clear()
+		if mover.at_center() and Vector2(mover.last_cell).distance_to(Vector2(target_cell)) <= TALK_DISTANCE:
+			mover.halt()
 			talking_to = talk_target
 			talk_target = {}
 			state = State.HABLANDO
 			return { "hablar": talking_to }
 		# La persona se ha movido: se replanifica hacia ella.
-		if Vector2(destination).distance_to(Vector2(target_cell)) > TALK_DISTANCE or not mover.is_moving():
-			destination = layout.nearest_manager_cell(target_cell, mover.cell(), occupied)
+		if Vector2(destination).distance_to(Vector2(target_cell)) > TALK_DISTANCE or mover.arrived():
+			destination = layout.nearest_free_cell(target_cell, mover.last_cell, occupied)
 			_plan(layout, occupied)
-	if mover.is_moving() and _next_blocked(occupied):
-		# Alguien se ha puesto en medio: busca otro camino o espera a que se aparte.
-		_plan(layout, occupied)
-		if mover.path.is_empty() or _next_blocked(occupied):
-			blocked_time += minutes
-			if blocked_time > GIVE_UP_MINUTES:
-				_reset()
-				mover.path.clear()
-				notice = "No puede pasar"
-			return {}
+	var before := mover.pos
+	mover.step(minutes, can_enter)
+	if mover.pos == before and not mover.arrived():
+		# Alguien le corta el paso: cada medio minuto busca otro camino; si tarda mucho, desiste.
+		var previous := blocked_time
+		blocked_time += minutes
+		if floori(blocked_time / 0.5) != floori(previous / 0.5):
+			if occupied.has(destination) and talk_target.is_empty() and target_object == "":
+				destination = layout.nearest_free_cell(destination, mover.last_cell, occupied)
+			_plan(layout, occupied)
+		if blocked_time > GIVE_UP_MINUTES:
+			_reset()
+			mover.halt()
+			notice = "No puede pasar"
+		return {}
 	blocked_time = 0.0
-	mover.step(minutes)
-	if mover.is_moving() or not talk_target.is_empty():
+	if not mover.arrived() or not talk_target.is_empty():
 		return {}
 	if target_object != "":
 		using = target_object
@@ -130,19 +136,12 @@ func _set_destination(layout: RestaurantLayout, cell: Vector2i, occupied: Array[
 		notice = "No hay forma de llegar"
 
 
+## Calcula el camino evitando a la gente; si así no hay, por donde se pueda (y ya
+## esperará a que se aparten). Devuelve si hay forma de llegar.
 func _plan(layout: RestaurantLayout, occupied: Array[Vector2i]) -> bool:
-	if mover.cell() == destination:
-		mover.set_path([destination])
+	if mover.try_go_to(layout, destination, occupied):
 		return true
-	var path := layout.manager_path(mover.cell(), destination, occupied)
-	mover.set_path(path)
-	return not path.is_empty()
-
-
-## ¿Hay alguien en la siguiente celda del camino, a la que aún no ha entrado?
-func _next_blocked(occupied: Array[Vector2i]) -> bool:
-	var next := mover.path[0]
-	return occupied.has(next) and next != mover.cell()
+	return mover.go_to(layout, destination)
 
 
 func _reset() -> void:

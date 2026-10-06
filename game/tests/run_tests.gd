@@ -22,6 +22,7 @@ func _initialize() -> void:
 	test_manager_walks_and_uses_computer()
 	test_tap_detector()
 	test_manager_avoids_obstacles()
+	test_nobody_walks_through_anything()
 	test_manager_talks()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
@@ -103,15 +104,15 @@ func test_layout_paths_avoid_tables() -> void:
 	var layout := RestaurantLayout.new(load_data()["start"]["local"])
 	check(layout.tables.size() == 6, "seis mesas")
 	for table in layout.tables:
-		check(not layout.is_walkable(table.cell), "la mesa bloquea el paso")
-		check(layout.is_walkable(table.service_cell), "se puede atender la mesa %d" % table.id)
+		check(not layout.can_stand(table.cell), "la mesa bloquea el paso")
+		check(layout.can_stand(table.service_cell), "se puede atender la mesa %d" % table.id)
 		for seat in table.seats:
-			check(layout.is_walkable(seat), "se puede llegar a la silla %s" % str(seat))
+			check(layout.is_sittable(seat) and not layout.can_stand(seat), "la silla %s no se atraviesa, pero uno se puede sentar" % str(seat))
 			var path := layout.find_path(layout.spawn_cell, seat)
 			check(not path.is_empty(), "camino de la calle a la silla %s" % str(seat))
 			for c in path:
-				check(layout.is_walkable(c), "el camino no atraviesa obstáculos")
-	check(not layout.find_path(layout.waiter_home, layout.pass_cell).is_empty(), "camino al pase")
+				check(layout.can_stand(c) or c == seat, "el camino no atraviesa obstáculos")
+	check(not layout.find_path(layout.waiter_homes[0], layout.pass_cell).is_empty(), "camino al pase")
 
 
 func test_mover_reaches_target() -> void:
@@ -284,7 +285,7 @@ func test_manager_walks_and_uses_computer() -> void:
 	sim.order_manager_walk(table.seats[0])
 	for i in 200:
 		sim.update(0.25)
-	check(layout.manager_can_stand(m.mover.cell()) and m.mover.cell().distance_to(table.seats[0]) <= 1.5, "si tocas una silla, se queda al lado")
+	check(layout.can_stand(m.mover.cell()) and m.mover.cell().distance_to(table.seats[0]) <= 1.5, "si tocas una silla, se queda al lado")
 	# Usar el ordenador: llega, se sienta y avisa una vez.
 	var used: Array[String] = []
 	sim.manager_started_using.connect(func(id: String): used.append(id))
@@ -305,32 +306,63 @@ func test_manager_avoids_obstacles() -> void:
 	var sim := RestaurantSim.new(load_data(), 9 * 60, 7)
 	var layout := sim.layout
 	var m := sim.manager
-	# Cruzar el comedor de punta a punta: nunca pisa mesas, sillas ni muebles.
-	for target in [Vector2i(0, 9), Vector2i(7, 0), Vector2i(0, 0), Vector2i(10, 2), Vector2i(9, 8)]:
+	# Cruzar el local de punta a punta: nunca pisa mesas, sillas ni muebles.
+	for target in [Vector2i(0, 9), Vector2i(7, 3), Vector2i(0, 0), Vector2i(10, 2), Vector2i(9, 8)]:
 		sim.order_manager_walk(target)
 		var ok := true
 		for i in 400:
 			sim.update(0.1)
-			var c := m.mover.cell()
-			if not layout.manager_can_stand(c):
+			if not layout.can_stand(m.mover.cell()):
 				ok = false
 		check(ok, "camino hasta %s sin atravesar muebles" % target)
-		check(m.mover.cell() == target, "llega a %s" % target)
+		check(m.mover.last_cell == target, "llega a %s" % target)
 	check(layout.zone_name_at(Vector2i(10, 2)) == "Cocina", "se puede entrar en la cocina por la puerta")
-	# Las personas cortan el paso: el camino las rodea.
-	var path := layout.manager_path(Vector2i(0, 0), Vector2i(0, 4), [Vector2i(0, 2)])
+	var path := layout.find_path(Vector2i(0, 0), Vector2i(0, 4), [Vector2i(0, 2)])
 	check(not path.is_empty() and not path.has(Vector2i(0, 2)), "el camino rodea a una persona")
-	# Si alguien se queda en medio, espera o rodea, pero no lo atraviesa.
-	m.mover.pos = Vector2(0, 0)
-	sim.order_manager_walk(Vector2i(0, 9))
-	var blocker := Vector2i(0, 4)
-	var crossed := false
-	for i in 300:
-		var event := m.step(0.1, layout, [blocker] as Array[Vector2i])
-		if m.mover.cell() == blocker:
-			crossed = true
-	check(not crossed, "no atraviesa a una persona parada en el camino")
-	check(m.mover.cell() == Vector2i(0, 9), "la rodea y llega")
+
+
+## Comprueba en cada instante de un día que nadie atraviesa a nadie ni pisa muebles.
+func test_nobody_walks_through_anything() -> void:
+	var sim := RestaurantSim.new(load_data(), 11 * 60 + 30, 4242)
+	var layout := sim.layout
+	var overlaps := 0
+	var on_furniture := 0
+	var report := {}
+	sim.day_closed.connect(func(r: Dictionary): report.merge(r))
+	# Además, el gestor da vueltas por el comedor entre la gente.
+	var walks: Array[Vector2i] = [Vector2i(0, 0), Vector2i(7, 9), Vector2i(7, 0), Vector2i(0, 9), Vector2i(10, 3)]
+	var tick := 0
+	while sim.minutes < 24 * 60 + 60:
+		if tick % 200 == 0:
+			sim.order_manager_walk(walks[(tick / 200) % walks.size()])
+		tick += 1
+		sim.update(0.25)
+		var all := sim.agents()
+		for i in all.size():
+			var mover: Mover = all[i][0]
+			var c := mover.cell()
+			if not layout.can_stand(c) and not layout.is_sittable(c):
+				on_furniture += 1
+			for j in range(i + 1, all.size()):
+				var other: Mover = all[j][0]
+				if all[i][1] == all[j][1] or mover.pos.distance_to(other.pos) >= 0.5:
+					continue
+				if mover.cell() == layout.spawn_cell or other.cell() == layout.spawn_cell:
+					continue
+				# Dos personas que se cruzan de frente intercambian casillas: no cuenta.
+				var swapping := mover.is_moving() and other.is_moving() \
+						and mover.path[0] == other.last_cell and other.path[0] == mover.last_cell
+				if not swapping:
+					overlaps += 1
+	check(overlaps == 0, "nadie comparte casilla con otra persona (%d solapes)" % overlaps)
+	check(on_furniture == 0, "nadie pisa mesas, barra ni muebles (%d veces)" % on_furniture)
+	var served: int = report.get("clientes_servidos", 0)
+	check(served >= 50, "el servicio sigue funcionando con tráfico: %d clientes atendidos" % served)
+	check(sim.forced_passes <= 10, "los cruces forzados son raros: %d" % sim.forced_passes)
+	print("Día con tráfico: %d clientes atendidos, %d perdidos, %d pasos forzados" % [served, report.get("grupos_perdidos", 0), sim.forced_passes])
+	# Nadie se queda atascado: al final del día no queda nadie esperando para siempre.
+	for a in sim.agents():
+		check(a[0].wait_time < RestaurantSim.GHOST_AFTER, "nadie se queda atascado")
 
 
 func test_manager_talks() -> void:

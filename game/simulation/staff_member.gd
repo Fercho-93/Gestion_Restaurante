@@ -13,6 +13,8 @@ var trato: float
 var habilidad: float
 var salario_dia: float
 var mover: Mover
+## Dónde espera cuando no tiene nada que hacer.
+var home: Vector2i
 ## Camareros: tarea actual {tipo, grupo, fase, tiempo} o vacía si está libre.
 var task: Dictionary = {}
 ## Cocineros: platos que está preparando [{grupo, receta, tiempo}].
@@ -29,6 +31,7 @@ func _init(d: Dictionary, staff_id: int, start_cell: Vector2i) -> void:
 	trato = float(d.get("trato", 50))
 	habilidad = float(d.get("habilidad", 50))
 	salario_dia = float(d["salario_dia"])
+	home = start_cell
 	mover = Mover.new(start_cell, Mover.BASE_SPEED * speed_factor())
 
 

@@ -97,7 +97,7 @@ func is_food_ready() -> bool:
 
 func all_arrived() -> bool:
 	for m in members:
-		if m.is_moving():
+		if not m.arrived():
 			return false
 	return true
 

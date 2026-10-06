@@ -28,7 +28,7 @@
 		"puerta_cocina": [8, 5],
 		"obstaculos": [[11, 8], [11, 9]],
 		"pase": [7, 2],
-		"puesto_camareros": [7, 4],
+		"puestos_camareros": [[7, 0], [6, 0], [7, 9], [3, 0]],
 		"puesto_gestor": [6, 7],
 		"puestos_cocina": [[9, 1], [9, 4]],
 		"aparicion": [-2, 9],
