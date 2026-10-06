@@ -1,15 +1,14 @@
 extends Node3D
 ## Escena principal: une el restaurante 3D, la simulación y el HUD.
 
-## Si el dedo se mueve más que esto, es un arrastre de cámara y no un toque.
-const TAP_MAX_DISTANCE := 16.0
-
 @onready var world: Node3D = $World
 @onready var camera: IsoCamera = $Camera
 @onready var sun: DirectionalLight3D = $Sun
 @onready var hud: HUD = $HUD
 
 var _press_position := Vector2.ZERO
+## Si en el gesto ha habido dos dedos (pellizco), al soltar no es un toque.
+var _multi_touch := false
 
 
 func _ready() -> void:
@@ -20,11 +19,15 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventScreenTouch and event.index == 0:
-		if event.pressed:
-			_press_position = event.position
-		elif event.position.distance_to(_press_position) < TAP_MAX_DISTANCE:
-			_on_tap(event.position)
+	if not event is InputEventScreenTouch:
+		return
+	if event.index > 0:
+		_multi_touch = true
+	elif event.pressed:
+		_press_position = event.position
+		_multi_touch = false
+	elif not _multi_touch and event.position.distance_to(_press_position) < camera.tap_slop():
+		_on_tap(event.position)
 
 
 ## Un toque en el mundo: el ordenador se usa, las personas se consultan y el suelo es

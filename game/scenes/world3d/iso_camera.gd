@@ -10,12 +10,17 @@ const YAW_DEG := 45.0
 const DISTANCE := 40.0
 const MIN_SIZE := 4.0
 const MAX_SIZE := 16.0
+## Cuánto puede moverse un dedo (en fracción del alto de pantalla) y seguir siendo un toque.
+const TAP_SLOP := 0.035
 ## Zona por la que se puede mover el centro de la cámara.
 const BOUNDS := Rect2(-3, -1, 16, 12)
 
 var target := Vector3.ZERO
 ## Dedos en pantalla: índice -> posición.
 var _touches := {}
+## Dónde se apoyó el dedo (para no mover la cámara con el temblor de un toque).
+var _press_start := Vector2.ZERO
+var _panning := false
 
 
 func _ready() -> void:
@@ -25,6 +30,11 @@ func _ready() -> void:
 	far = 200.0
 	rotation_degrees = Vector3(PITCH_DEG, YAW_DEG, 0)
 	_apply()
+
+
+## Distancia máxima (en píxeles de la vista) para considerar un gesto como toque.
+func tap_slop() -> float:
+	return get_viewport().get_visible_rect().size.y * TAP_SLOP
 
 
 func focus(point: Vector3) -> void:
@@ -45,6 +55,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_touches[event.index] = event.position
+			if _touches.size() == 1:
+				_press_start = event.position
+				_panning = false
 		else:
 			_touches.erase(event.index)
 	elif event is InputEventScreenDrag:
@@ -54,6 +67,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_touches[event.index] = event.position
 		var fingers: Array = _touches.keys()
 		if fingers.size() == 1:
+			# El temblor de un toque no mueve la cámara; al pasar el margen, el suelo
+			# que tocaste al principio se pone bajo el dedo.
+			if not _panning and event.position.distance_to(_press_start) < tap_slop():
+				_touches[event.index] = before[event.index]
+				get_viewport().set_input_as_handled()
+				return
+			_panning = true
 			_move_keeping(before[event.index], event.position, size)
 		elif event.index in fingers.slice(0, 2):
 			var a: int = fingers[0]
@@ -63,6 +83,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var old_gap: float = before[a].distance_to(before[b])
 			var new_gap: float = _touches[a].distance_to(_touches[b])
 			var new_size := size if new_gap < 1.0 else size * old_gap / new_gap
+			_panning = true
 			_move_keeping(old_mid, new_mid, new_size)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and event.pressed:

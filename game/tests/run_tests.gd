@@ -221,6 +221,11 @@ func test_camera_follows_fingers() -> void:
 	# Un dedo: el punto del suelo bajo el dedo sigue bajo el dedo, en cualquier dirección.
 	var finger := Vector2(900, 500)
 	_touch(cam, 0, finger, true)
+	# Primero el dedo pasa el margen del toque y empieza el arrastre.
+	var start_ground := cam.screen_to_ground(finger)
+	_drag(cam, 0, finger, finger + Vector2(0, cam.tap_slop() * 1.5))
+	finger += Vector2(0, cam.tap_slop() * 1.5)
+	check(cam.screen_to_ground(finger).distance_to(start_ground) < 0.01, "al empezar a arrastrar, el suelo tocado va bajo el dedo")
 	for step in [Vector2(60, 0), Vector2(0, -60), Vector2(-60, 0), Vector2(0, 60), Vector2(35, -20)]:
 		var grabbed := cam.screen_to_ground(finger)
 		_drag(cam, 0, finger, finger + step)
@@ -234,6 +239,14 @@ func test_camera_follows_fingers() -> void:
 	_touch(cam, 0, Vector2(900, 500), false)
 	var screen_down := cam.screen_to_ground(Vector2(900, 700)) - cam.screen_to_ground(Vector2(900, 500))
 	check((cam.target - center_before).dot(screen_down) > 0.0, "arrastrar arriba sube el escenario")
+	# El temblor de un toque (unos píxeles) no mueve la cámara.
+	var still := cam.target
+	_touch(cam, 0, Vector2(900, 500), true)
+	_drag(cam, 0, Vector2(900, 500), Vector2(906, 502))
+	_drag(cam, 0, Vector2(906, 502), Vector2(912, 504))
+	_touch(cam, 0, Vector2(912, 504), false)
+	check(cam.target == still, "un toque con temblor no mueve la cámara")
+	check(Vector2(12, 4).length() < cam.tap_slop(), "ese temblor cuenta como toque")
 	# Pellizco: el punto entre los dedos se queda quieto y el zoom cambia.
 	var a := Vector2(300, 400)
 	var b := Vector2(500, 400)
