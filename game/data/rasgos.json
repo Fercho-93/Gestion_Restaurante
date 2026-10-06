@@ -1,0 +1,11 @@
+[
+	{ "id": "impaciente", "nombre": "Impaciente", "descripcion": "Odia esperar: se enfada antes.", "efectos": { "paciencia": 0.7 } },
+	{ "id": "tranquilo", "nombre": "Tranquilo", "descripcion": "Se toma las cosas con calma: aguanta más las esperas.", "efectos": { "paciencia": 1.3 } },
+	{ "id": "tacano", "nombre": "Tacaño", "descripcion": "Mira mucho el precio y deja poca propina.", "efectos": { "sensibilidad_precio": 1.4, "propina": 0.4 } },
+	{ "id": "generoso", "nombre": "Generoso", "descripcion": "Si le tratan bien, deja buenas propinas.", "efectos": { "propina": 1.8 } },
+	{ "id": "quisquilloso", "nombre": "Quisquilloso", "descripcion": "Exigente con la comida y la limpieza.", "efectos": { "exigencia": 1.35, "limpieza": 1.5 } },
+	{ "id": "educado", "nombre": "Educado", "descripcion": "Paciente y amable: casi nunca se queja en voz alta.", "efectos": { "paciencia": 1.1, "quejas": 0.3 } },
+	{ "id": "sociable", "nombre": "Sociable", "descripcion": "Le encanta charlar: hablar con el gestor le alegra mucho.", "efectos": { "charla": 2.0, "estancia": 1.15 } },
+	{ "id": "ruidoso", "nombre": "Ruidoso", "descripcion": "Habla alto y a veces molesta a las mesas de al lado.", "efectos": { "ruido": 1.0 } },
+	{ "id": "goloso", "nombre": "Goloso", "descripcion": "Nunca dice que no a un postre: invitarle le encanta.", "efectos": { "postre": 2.0 } }
+]

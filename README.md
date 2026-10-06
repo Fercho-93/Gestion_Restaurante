@@ -18,8 +18,11 @@ En el móvil, gíralo en horizontal.
 2. En el gestor de proyectos: **Importar** → selecciona `game/project.godot`.
 3. Pulsa **F5** para jugar.
 
+Al empezar se elige el barrio (universitario, acomodado, alternativo u oficinas): cada
+uno tiene su gente, sus precios, su alquiler y sus horas fuertes.
+
 Controles: tocar el suelo para mover al gestor; tocar a una persona para ir a hablar
-con ella; tocarte a ti mismo para ponerte a atender mesas, limpiar o tomar un café;
+con ella (el botón "Ficha" muestra sus necesidades, rasgos, gustos y recuerdos); tocarte a ti mismo para ponerte a atender mesas, limpiar o tomar un café;
 tocar una mesa sucia o una mancha para limpiarla; el ordenador del despacho para
 gestionar y la cafetera de la barra para recuperar energía; arrastrar para mover la cámara,
 pellizcar o rueda para el zoom; barra espaciadora para pausar.
@@ -37,8 +40,8 @@ godot --headless --path game -s res://tests/run_tests.gd
 ```
 game/
   simulation/  lógica pura del juego (reloj, economía, cocina...)
-  data/        contenido en JSON (ingredientes, recetas...)
-  scenes/      mundo isométrico y personajes
+  data/        contenido en JSON (ingredientes, recetas, barrios, perfiles, rasgos...)
+  scenes/      pantalla de inicio, mundo isométrico y personajes
   ui/          interfaz
   tests/       pruebas automáticas
 docs/          documento de diseño

@@ -29,6 +29,10 @@ func _initialize() -> void:
 	test_room_life()
 	test_manager_energy()
 	test_manager_helps_arriving_customers()
+	test_neighborhood_population()
+	test_barrios_play_differently()
+	test_profiles_change_behavior()
+	test_person_sheet()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -41,10 +45,10 @@ func check(condition: bool, message: String) -> void:
 		printerr("FALLO: ", message)
 
 
-func load_data() -> Dictionary:
+func load_data(barrio_id: String = "") -> Dictionary:
 	var data = load("res://simulation/game_data.gd").new()
 	data.load_all()
-	var result: Dictionary = data.sim_data()
+	var result: Dictionary = data.sim_data(barrio_id)
 	data.free()
 	return result
 
@@ -92,6 +96,7 @@ func test_data_is_valid() -> void:
 	check(data.ingredients.size() > 0, "hay ingredientes")
 	check(data.recipes.size() > 0, "hay recetas")
 	check(not data.start.is_empty() and not data.demand.is_empty(), "hay partida inicial y demanda")
+	check(data.barrios.size() >= 4 and data.perfiles.size() > 0 and data.rasgos.size() > 0, "hay barrios, perfiles y rasgos")
 	check(data.validate().is_empty(), "datos coherentes: %s" % str(data.validate()))
 	data.free()
 
@@ -744,3 +749,154 @@ func test_manager_helps_arriving_customers() -> void:
 			t.group = g
 	ids = Conversation.options(t2, sim).map(func(o): return o["id"])
 	check(ids.has("sin_mesa"), "sin ninguna mesa, el gestor puede tranquilizarles")
+
+
+func test_neighborhood_population() -> void:
+	var data := load_data("universitario")
+	check(data.has("barrio") and data.has("perfiles") and data.has("rasgos"), "datos del barrio cargados")
+	var sim := RestaurantSim.new(data, 11 * 60 + 30, 777)
+	check(sim.population != null and sim.population.neighbors.size() == 320, "el barrio universitario tiene sus vecinos")
+	check(is_equal_approx(float(sim.fixed_costs["alquiler"]), 70.0), "el alquiler es el del barrio")
+	var students := 0
+	for n in sim.population.neighbors:
+		check(n.budget >= float(n.profile["presupuesto"][0]) and n.budget <= float(n.profile["presupuesto"][1]), "presupuesto dentro del perfil")
+		check(n.traits.size() <= 2 and n.favorites.size() >= 1, "rasgos y gustos")
+		if n.profile["id"] == "estudiante":
+			students += 1
+	check(students > 150, "en el barrio universitario la mayoría son estudiantes (%d)" % students)
+	# Un día entero: los grupos son vecinos y se acuerdan de su visita.
+	var left: Array[CustomerGroup] = []
+	sim.group_left.connect(func(g: CustomerGroup): left.append(g))
+	while sim.minutes < 24 * 60 + 60:
+		sim.update(0.25)
+	check(left.size() > 10, "vienen grupos de vecinos (%d)" % left.size())
+	for g in left:
+		check(g.people.size() == g.size, "cada miembro es un vecino o un niño")
+		var head := g.person(0)
+		check(head != null and head.visits >= 1 and not head.memories.is_empty(), "el vecino recuerda su visita")
+	# La opinión sigue a la experiencia y un vecino feliz y repetidor es habitual.
+	var n: Neighbor = sim.population.neighbors[0]
+	for i in 3:
+		n.remember(i * 3, 95.0, "La comida, buenísima")
+	check(n.opinion > 0.8 and n.is_regular(), "tres visitas muy buenas le hacen habitual")
+	var m: Neighbor = sim.population.neighbors[1]
+	m.remember(0, 10.0, "Esperó demasiado")
+	check(m.opinion < 0.3 and not m.is_regular(), "una mala visita le quita las ganas")
+	# Quien odia el sitio casi nunca está entre los que quieren venir.
+	for k in sim.population.neighbors:
+		k.opinion = 0.0
+		k.last_visit_day = -100
+	sim.population.neighbors[5].opinion = 1.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 3
+	var picked_fan := 0
+	var picked_others := 0
+	for i in 400:
+		var group := sim.population.pick_group(1, 10, rng)
+		if not group.is_empty():
+			if group[0] == sim.population.neighbors[5]:
+				picked_fan += 1
+			else:
+				picked_others += 1
+	var per_other := picked_others / float(sim.population.neighbors.size() - 1)
+	check(picked_fan > 8.0 * per_other, "a quien le encanta el sitio viene mucho más (%d frente a %.1f)" % [picked_fan, per_other])
+
+
+func test_barrios_play_differently() -> void:
+	var rich := RestaurantSim.new(load_data("acomodado"), 11 * 60 + 30, 5)
+	var students := RestaurantSim.new(load_data("universitario"), 11 * 60 + 30, 5)
+	check(rich.price_level > students.price_level, "en el barrio rico se pagan precios más altos")
+	check(float(rich.fixed_costs["alquiler"]) > float(students.fixed_costs["alquiler"]), "y el alquiler es más caro")
+	var offices := RestaurantSim.new(load_data("oficinas"), 11 * 60 + 30, 5)
+	check(offices.demand.groups_per_hour[13] > offices.demand.groups_per_hour[21], "en las oficinas la hora fuerte es la comida")
+	# El mismo plato a 25 € es caro para un estudiante y razonable para un ejecutivo.
+	var student: Neighbor = null
+	var executive: Neighbor = null
+	for n in students.population.neighbors:
+		if n.profile["id"] == "estudiante" and student == null:
+			student = n
+	for n in rich.population.neighbors:
+		if n.profile["id"] == "ejecutivo" and executive == null:
+			executive = n
+	for sim in [students, rich]:
+		for recipe_id in sim.menu:
+			sim.menu[recipe_id] = 25.0 if recipe_id == "entrecot" else 8.0
+	var student_steak := 0
+	var executive_steak := 0
+	for i in 400:
+		if students._choose_dish(student) == "entrecot":
+			student_steak += 1
+		if rich._choose_dish(executive) == "entrecot":
+			executive_steak += 1
+	check(executive_steak > student_steak * 2, "el ejecutivo pide entrecot mucho más que el estudiante (%d vs %d)" % [executive_steak, student_steak])
+	print("Barrios: entrecot a 25 € → estudiante %d/400, ejecutivo %d/400" % [student_steak, executive_steak])
+
+
+func test_profiles_change_behavior() -> void:
+	var sim := RestaurantSim.new(load_data("alternativo"), 13 * 60, 9)
+	var calm := Neighbor.new()
+	calm.profile = sim.population.profiles["jubilado"]
+	calm.traits.append(sim.population.traits["tranquilo"])
+	var hasty := Neighbor.new()
+	hasty.profile = sim.population.profiles["oficinista"]
+	hasty.traits.append(sim.population.traits["impaciente"])
+	check(calm.factor("paciencia") > 1.5 and hasty.factor("paciencia") < 0.6, "paciencia según perfil y rasgos")
+	var g := CustomerGroup.new()
+	g.size = 1
+	g.people = [hasty]
+	check(g.factor("paciencia") < 0.6 and not g.has_trait("tranquilo") and g.has_trait("impaciente"), "el grupo hereda los rasgos")
+	# Un quisquilloso puntúa peor la misma comida y la misma suciedad.
+	var picky := Neighbor.new()
+	picky.profile = sim.population.profiles["sibarita"]
+	picky.traits.append(sim.population.traits["quisquilloso"])
+	var easy := Neighbor.new()
+	easy.profile = sim.population.profiles["estudiante"]
+	var gp := CustomerGroup.new()
+	gp.people = [picky]
+	gp.dishes.append("flan")
+	gp.food_quality_sum = 70.0
+	var ge := CustomerGroup.new()
+	ge.people = [easy]
+	ge.dishes.append("flan")
+	ge.food_quality_sum = 70.0
+	sim.stains[Vector2i(2, 2)] = null
+	var pp := sim.satisfaction_parts(gp, 70.0)
+	var pe := sim.satisfaction_parts(ge, 70.0)
+	check(pp["comida"] < pe["comida"] and pp["limpieza"] < pe["limpieza"], "el quisquilloso es más exigente")
+	# Los nombres de los clientes son los de los vecinos.
+	g.id = 3
+	hasty.nombre = "Rocío Navarro"
+	check(Conversation.customer_name(g, 0) == "Rocío", "el cliente se llama como el vecino")
+
+
+func test_person_sheet() -> void:
+	var sim := RestaurantSim.new(load_data("acomodado"), 13 * 60, 21)
+	var g := _seated_group(sim, 90, 2, 0)
+	var who: Neighbor = sim.population.neighbors[0]
+	who.traits = [sim.population.traits["goloso"]]
+	who.favorites = ["flan"]
+	g.people = [who, null]
+	var sheet := PersonSheet.build({ "entity": g, "member": 0 }, sim)
+	check(sheet["perfil"] == who.profile["nombre"], "la ficha muestra el perfil")
+	check(sheet["necesidades"].size() == 4, "cuatro necesidades: ánimo, paciencia, hambre y entorno")
+	for need in sheet["necesidades"]:
+		check(need[1] >= 0.0 and need[1] <= 1.0, "necesidad %s entre 0 y 1" % need[0])
+	check(sheet["rasgos"].size() == 1 and sheet["rasgos"][0][0] == "Goloso", "rasgos con descripción")
+	check(sheet["gustos"] == ["Flan casero"], "gustos con el nombre del plato")
+	check(sheet["opinion"] == "Aún no conoce el sitio", "opinión de quien no ha venido nunca")
+	# Mientras esperan, la paciencia baja; al comer se van saciando.
+	g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
+	var before: float = PersonSheet.build({ "entity": g, "member": 0 }, sim)["necesidades"][1][1]
+	g.state_time = 20.0
+	var after: float = PersonSheet.build({ "entity": g, "member": 0 }, sim)["necesidades"][1][1]
+	check(after < before, "la paciencia se gasta esperando")
+	g.set_state(CustomerGroup.State.COMIENDO)
+	g.eat_time_left = 10.0
+	var hungry: float = PersonSheet.build({ "entity": g, "member": 0 }, sim)["necesidades"][2][1]
+	g.state_time = 9.0
+	g.eat_time_left = 1.0
+	var full: float = PersonSheet.build({ "entity": g, "member": 0 }, sim)["necesidades"][2][1]
+	check(full > hungry, "comiendo se sacia")
+	check(PersonSheet.build({ "entity": g, "member": 1 }, sim)["perfil"] == "Cliente", "acompañante anónimo")
+	check(PersonSheet.build({ "entity": sim.staff[0], "member": 0 }, sim)["necesidades"].size() == 4, "ficha de empleado")
+	check(PersonSheet.build({ "entity": sim.manager, "member": 0 }, sim)["necesidades"][0][0] == "Energía", "ficha del gestor")

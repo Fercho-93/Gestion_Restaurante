@@ -115,6 +115,20 @@ func _summary() -> void:
 	var f := sim.finances
 	_line("Caja: %s €" % HUD.format_money(f.money), 32)
 	_line("Reputación: %.1f/5" % sim.average_stars(), 28)
+	if sim.population != null:
+		var known := 0
+		var regulars := 0
+		var opinion := 0.0
+		for n in sim.population.neighbors:
+			if n.visits > 0:
+				known += 1
+				opinion += n.opinion
+			if n.is_regular():
+				regulars += 1
+		_line("%s · alquiler %d €/día" % [sim.barrio["nombre"], int(sim.fixed_costs["alquiler"])], 28, Color("b0bec5"))
+		var opinion_text := "—" if known == 0 else "%d%%" % roundi(opinion / known * 100.0)
+		_line("   Vecinos que ya os conocen: %d de %d · Habituales: %d · Les gusta: %s" % [
+				known, sim.population.neighbors.size(), regulars, opinion_text], 28)
 	_line("Hoy, de momento:", 28, Color("b0bec5"))
 	_line("   Ingresos: %.2f €" % f.total(f.income), 28, Color("81c784"))
 	_line("   Gastos: %.2f €" % f.total(f.expenses), 28, Color("e57373"))

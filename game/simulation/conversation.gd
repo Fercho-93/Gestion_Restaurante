@@ -36,6 +36,9 @@ static func customer_name(g: CustomerGroup, member: int) -> String:
 		return g.regular_name
 	if member == g.child_member:
 		return ["Lucas", "Martina", "Hugo", "Vera"][g.id % 4] + " (niño)"
+	var who := g.person(member)
+	if who != null:
+		return who.nombre.get_slice(" ", 0)
 	return CUSTOMER_NAMES[(g.id * 5 + member * 3) % CUSTOMER_NAMES.size()]
 
 
@@ -194,7 +197,8 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 		"que_tal":
 			if first_time:
 				# A un habitual le alegra mucho que el jefe le salude.
-				g.mood_bonus += CHAT_MOOD * (3.0 if g.regular_name != "" else 1.0)
+				# A los sociables les encanta charlar.
+				g.mood_bonus += CHAT_MOOD * (3.0 if g.regular_name != "" else 1.0) * g.factor("charla")
 				if g.regular_name != "":
 					g.talked["saludo"] = true
 					return "¡Siempre da gusto venir aquí, jefe!"
@@ -209,7 +213,8 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 			g.patience_bonus += APOLOGY_PATIENCE
 			return "Bueno, se agradece. Esperaremos un poco más."
 		"invitar":
-			g.mood_bonus += TREAT_MOOD
+			# A un goloso, que le inviten al postre le alegra el día.
+			g.mood_bonus += TREAT_MOOD * minf(g.factor("postre"), 1.6)
 			g.comp_value += TREAT_COST
 			sim.finances.spend("invitaciones", TREAT_COST)
 			sim.day_stats["invitaciones"] += TREAT_COST

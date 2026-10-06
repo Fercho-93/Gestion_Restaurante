@@ -103,11 +103,52 @@ Bucle largo: local pequeño → reputación → reformas → segundo local → c
 
 ## 5. Sistemas de gestión
 
-### 5.1 Ubicación
-- Mapa de ciudad con barrios: centro turístico, zona de oficinas, universitario,
-  residencial familiar, periferia.
-- Cada barrio: tráfico peatonal por franja horaria, perfil de cliente, poder
-  adquisitivo, competencia, precio por m².
+### 5.1 Ubicación (barrios)
+- Al empezar la partida se elige barrio. Cada uno es una forma distinta de jugar:
+  - **Universitario**: mucha gente con poco dinero (estudiantes, docentes). Precios
+    bajos (×0,8), alquiler barato. Funciona un bar de raciones/menús baratos.
+  - **Acomodado**: menos clientes, exigentes y con dinero (ejecutivos, jubilados,
+    sibaritas). Precios altos (×1,35), alquiler caro. Calidad, trato y ambiente.
+  - **Alternativo**: artistas y jóvenes que valoran el ambiente y la originalidad, cenas
+    largas y fuertes por la noche. Precios medios.
+  - **Oficinas**: avalancha a mediodía de gente con prisa, casi nadie por la noche.
+    Servir rápido es lo que más importa.
+- Cada barrio define (en `data/barrios.json`): su población por perfiles, las llegadas
+  por hora, el tamaño de los grupos, el nivel de precios "normal", el alquiler y lo
+  animada que está la calle. Se pueden añadir barrios solo con datos (comida rápida,
+  centro turístico, residencial familiar…).
+- Más adelante: competencia en el barrio, mudarse o abrir un segundo local.
+
+### 5.1.1 La gente del barrio (la "IA" de los personajes)
+Inspirado en los Sims pero centrado en el restaurante: la vida fuera del local solo se
+intuye (gente que pasa por la acera, alguno se para a mirar), sin abrumar.
+
+- **Vecinos persistentes**: al empezar se genera el vecindario (240-320 personas) con
+  nombre, **perfil** (estudiante, docente, joven trabajador, oficinista, ejecutivo,
+  jubilado, familia, sibarita, artista), hasta 2 **rasgos**, presupuesto, platos
+  favoritos y **memoria** (visitas, opinión del local, últimos recuerdos).
+- Los grupos que llegan son vecinos de verdad. Quien tiene buena opinión vuelve más; quien
+  salió mal parado casi no vuelve; nadie repite antes de 2 días. Con varias visitas
+  buenas un vecino se hace **habitual** (se anuncia al llegar y le gusta que el jefe le
+  salude).
+- El **perfil** marca paciencia, sensibilidad al precio, exigencia con la comida,
+  cuánto valora el ambiente, propina y cuánto se queda. Los **rasgos** lo matizan:
+  impaciente, tranquilo, tacaño, generoso, quisquilloso (comida y limpieza), educado
+  (casi nunca se queja en voz alta), sociable (charlar le alegra mucho), ruidoso
+  (molesta a las mesas de al lado), goloso (invitarle al postre le encanta).
+- Al pedir, cada uno elige según sus favoritos, su presupuesto y lo que le parece el
+  precio respecto a lo normal del barrio.
+- **Ficha** (botón "Ficha" en el cuadro de diálogo): barras de necesidades en directo
+  (ánimo, paciencia, hambre, entorno), perfil, presupuesto, rasgos con su explicación,
+  gustos, visitas, opinión y lo que recuerda. También para empleados (ánimo y
+  atributos) y para el gestor (energía, trato).
+
+Plan para escalar la IA (siguientes fases):
+1. Necesidades y objetos "inteligentes" para el personal: cansancio, descansos en la
+   sala de personal, quejas por sueldo o carga de trabajo, amistades y roces.
+2. Relaciones vecino ↔ local más ricas: boca a boca (los vecinos contentos traen a
+   otros), reseñas que leen los demás, rivales del barrio.
+3. Eventos del barrio (fiestas, exámenes, verano) que cambian la demanda unos días.
 
 ### 5.2 Local
 - **Alquiler** (fianza + mensualidad) o **compra** (préstamo hipotecario).
@@ -154,8 +195,8 @@ Bucle largo: local pequeño → reputación → reformas → segundo local → c
 - Alérgenos, menú del día, platos de temporada.
 
 ### 5.7 Clientes
-- Perfiles: turista, oficinista, estudiante, familia, pareja, *foodie*, crítico.
-- Cada cliente tiene: presupuesto, gustos, **paciencia**, tamaño de grupo.
+- Son los vecinos del barrio (apartado 5.1.1): perfil, rasgos, presupuesto, gustos,
+  **paciencia** y memoria. Además: críticos de incógnito, cumpleaños, familias con niños.
 - **Satisfacción** (primera versión de la fórmula, a equilibrar):
 
   ```
@@ -332,6 +373,12 @@ Hito 1 en curso:
   una mesa sucia o tranquilizarles si no hay ninguna libre.
 - Pendiente de equilibrar: con el ritmo más pausado se atiende a menos clientes y el día
   sale con pérdidas; se ajustará con la carta y los precios, sueldos y alquiler.
+- ✅ Barrios y vecinos (apartados 5.1 y 5.1.1): pantalla inicial para elegir barrio,
+  vecindario persistente con perfiles, rasgos, gustos y memoria, comportamiento según
+  quién es cada cliente, ficha estilo Sims al tocar a alguien, transeúntes por la acera
+  y datos del barrio en el resumen del ordenador. En una semana simulada el barrio
+  universitario ya da beneficio (alquiler barato) y el acomodado pierde dinero hasta
+  que se suban los precios: hace falta Carta y precios.
 - Siguiente: Carta y precios (primer módulo de gestión del ordenador).
 
 ## 11. Pendiente de decidir

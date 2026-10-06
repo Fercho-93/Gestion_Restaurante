@@ -1,0 +1,66 @@
+[
+	{
+		"id": "universitario",
+		"nombre": "Barrio universitario",
+		"descripcion": "Facultades, residencias y pisos de estudiantes. Mucha gente con poco dinero: funciona lo barato, rápido y abundante.",
+		"consejo": "Un bar de raciones y menús baratos. Precios bajos, mucho movimiento.",
+		"nivel_precios": 0.8,
+		"alquiler_dia": 70,
+		"ambiente_calle": 1.0,
+		"vecinos": 320,
+		"poblacion": { "estudiante": 0.6, "docente": 0.15, "joven_trabajador": 0.2, "familia": 0.05 },
+		"grupos_por_hora": {
+			"12": 1, "13": 3.5, "14": 4.5, "15": 2.5, "16": 1, "17": 1,
+			"18": 1, "19": 1.5, "20": 2.5, "21": 4, "22": 3.5
+		},
+		"tamano_grupo": [[1, 0.15], [2, 0.35], [3, 0.25], [4, 0.25]]
+	},
+	{
+		"id": "acomodado",
+		"nombre": "Barrio acomodado",
+		"descripcion": "Calles tranquilas, chalets y comercios de lujo. Pocos clientes, pero exigentes y con dinero: se fijan en la calidad y en el ambiente.",
+		"consejo": "Un restaurante cuidado y más caro. Calidad, buen trato y buen ambiente.",
+		"nivel_precios": 1.35,
+		"alquiler_dia": 150,
+		"ambiente_calle": 0.7,
+		"vecinos": 240,
+		"poblacion": { "ejecutivo": 0.35, "jubilado": 0.25, "familia": 0.25, "sibarita": 0.15 },
+		"grupos_por_hora": {
+			"12": 0.5, "13": 2.5, "14": 3.5, "15": 2, "16": 0.5, "17": 0.5,
+			"18": 0.5, "19": 1, "20": 2.5, "21": 3.5, "22": 2.5
+		},
+		"tamano_grupo": [[1, 0.1], [2, 0.5], [3, 0.15], [4, 0.25]]
+	},
+	{
+		"id": "alternativo",
+		"nombre": "Barrio alternativo",
+		"descripcion": "Galerías, tiendas de segunda mano y mucha vida de noche. Gente curiosa que valora lo original y el buen rollo más que el lujo.",
+		"consejo": "Un local con personalidad y buen ambiente. Precios medios, cenas largas.",
+		"nivel_precios": 1.0,
+		"alquiler_dia": 95,
+		"ambiente_calle": 1.2,
+		"vecinos": 280,
+		"poblacion": { "artista": 0.4, "joven_trabajador": 0.3, "sibarita": 0.15, "estudiante": 0.15 },
+		"grupos_por_hora": {
+			"12": 0.5, "13": 2.5, "14": 3, "15": 2, "16": 1, "17": 1,
+			"18": 1, "19": 1.5, "20": 3, "21": 4.5, "22": 4
+		},
+		"tamano_grupo": [[1, 0.2], [2, 0.4], [3, 0.2], [4, 0.2]]
+	},
+	{
+		"id": "oficinas",
+		"nombre": "Distrito de oficinas",
+		"descripcion": "Torres de oficinas y mucho tráfico a mediodía. A la hora de comer hay avalancha de gente con prisa; por la noche, casi nadie.",
+		"consejo": "Comida rápida o menú del día. Servir rápido es lo que más importa.",
+		"nivel_precios": 0.95,
+		"alquiler_dia": 110,
+		"ambiente_calle": 0.9,
+		"vecinos": 300,
+		"poblacion": { "oficinista": 0.65, "ejecutivo": 0.15, "joven_trabajador": 0.2 },
+		"grupos_por_hora": {
+			"12": 2, "13": 6, "14": 6, "15": 2.5, "16": 0.5, "17": 0.5,
+			"18": 0.5, "19": 0.5, "20": 1, "21": 1.5, "22": 0.5
+		},
+		"tamano_grupo": [[1, 0.35], [2, 0.4], [3, 0.15], [4, 0.1]]
+	}
+]

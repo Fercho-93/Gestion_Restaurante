@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Gestión Restaurante"
-run/main_scene="res://scenes/main/main.tscn"
+run/main_scene="res://scenes/start/start_screen.tscn"
 config/features=PackedStringArray("4.5", "GL Compatibility")
 
 [autoload]

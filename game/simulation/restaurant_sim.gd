@@ -64,6 +64,11 @@ var day_stats: Dictionary = {}
 var stains: Dictionary = {}
 ## Veces que alguien ha tenido que "atravesar" a otro por un atasco imposible.
 var forced_passes := 0
+## Barrio donde está el local ({} si la partida no usa barrios) y sus vecinos.
+var barrio: Dictionary = {}
+var population: Population = null
+## Cuánto se paga normalmente en el barrio respecto al precio de mercado (1 = normal).
+var price_level := 1.0
 var _next_group_id := 1
 
 
@@ -81,7 +86,14 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 	finances = Finances.new(float(start["dinero_inicial"]))
 	opening_hour = int(start["hora_apertura"])
 	last_entry_hour = int(start["ultima_entrada"])
-	fixed_costs = start["costes_fijos_dia"]
+	fixed_costs = start["costes_fijos_dia"].duplicate()
+	if data.has("barrio"):
+		# El barrio decide quién vive cerca, cuánta gente pasa, el alquiler y los precios normales.
+		barrio = data["barrio"]
+		demand = Demand.new(barrio)
+		fixed_costs["alquiler"] = float(barrio["alquiler_dia"])
+		price_level = float(barrio["nivel_precios"])
+		population = Population.new(barrio, data["perfiles"], data["rasgos"], rng)
 	stock_targets = start["stock_objetivo"]
 	for item in start["carta"]:
 		menu[item["receta"]] = float(item["precio"])
@@ -116,6 +128,10 @@ func update(dt: float) -> void:
 	groups = groups.filter(func(g: CustomerGroup): return g.state != CustomerGroup.State.FUERA)
 	if _crossed(previous, minutes, 0):
 		_close_day()
+
+
+func day() -> int:
+	return int(minutes) / MINUTES_PER_DAY
 
 
 func hour() -> int:
@@ -450,7 +466,16 @@ func _spawn_customers(dt: float) -> void:
 		g.id = _next_group_id
 		_next_group_id += 1
 		g.size = demand.random_size(rng)
-		g.patience_factor = rng.randf_range(0.7, 1.3)
+		if population != null:
+			# Quien viene son vecinos de verdad (si a nadie le apetece venir, no viene nadie).
+			var neighbors := population.pick_group(g.size, day(), rng)
+			if neighbors.is_empty():
+				continue
+			g.size = neighbors.size()
+			g.people.assign(neighbors)
+			g.patience_factor = g.factor("paciencia") * rng.randf_range(0.85, 1.15)
+		else:
+			g.patience_factor = rng.randf_range(0.7, 1.3)
 		for m in g.size:
 			var member := Mover.new(layout.spawn_cell, Mover.BASE_SPEED * rng.randf_range(0.8, 1.0))
 			member.jitter = Vector2(rng.randf_range(-0.25, 0.25), rng.randf_range(-0.25, 0.25))
@@ -463,10 +488,19 @@ func _spawn_customers(dt: float) -> void:
 func _give_personality(g: CustomerGroup) -> void:
 	if g.size >= 3 and rng.randf() < 0.45:
 		g.child_member = g.size - 1
+		if g.child_member < g.people.size():
+			g.people[g.child_member] = null
 	if g.size >= 3 and rng.randf() < 0.08:
 		g.birthday = true
 	if g.size == 1 and rng.randf() < 0.06:
 		g.is_critic = true
+	elif population != null:
+		# Los habituales son vecinos que ya han venido varias veces y les gusta el sitio.
+		var head := g.person(0)
+		if head != null and head.is_regular():
+			g.regular_name = head.nombre
+			g.mood_bonus += 0.1
+			announcement.emit("Ha llegado %s, cliente habitual" % head.nombre, layout.spawn_cell)
 	elif reputation > 0.45 and rng.randf() < 0.12:
 		g.regular_name = REGULAR_NAMES[rng.randi() % REGULAR_NAMES.size()]
 		g.mood_bonus += 0.1
@@ -488,6 +522,7 @@ func _update_groups(dt: float) -> void:
 			CustomerGroup.State.YENDO_A_MESA:
 				if g.all_arrived():
 					g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
+					_bother_neighbors_if_noisy(g)
 			CustomerGroup.State.COMIENDO:
 				g.eat_time_left -= dt
 				if g.eat_time_left <= 0.0:
@@ -546,10 +581,22 @@ func _maybe_complain(g: CustomerGroup) -> void:
 	if g.state_time < 1.5 * g.patience_limit() and g.mood() > 0.3:
 		return
 	g.complained = true
+	# La gente educada casi nunca monta un numerito.
+	if rng.randf() > g.factor("quejas"):
+		return
 	g.shout_until = minutes + 4.0
 	for other in groups:
 		if other != g and other.table != null and Vector2(other.table.cell).distance_to(Vector2(g.table.cell)) <= 3.5:
 			other.mood_bonus -= 0.04
+
+
+## Un grupo ruidoso molesta un poco a las mesas de al lado mientras está sentado.
+func _bother_neighbors_if_noisy(g: CustomerGroup) -> void:
+	if not g.has_trait("ruidoso") or g.table == null:
+		return
+	for other in groups:
+		if other != g and other.table != null and Vector2(other.table.cell).distance_to(Vector2(g.table.cell)) <= 3.0:
+			other.mood_bonus -= 0.03
 
 
 ## Los grupos que esperan mesa forman cola en la calle, en orden de llegada.
@@ -653,6 +700,7 @@ func _leave_angry(g: CustomerGroup, reason: String) -> void:
 	day_stats["grupos_perdidos"] += 1
 	day_stats["motivos_perdida"][reason] = day_stats["motivos_perdida"].get(reason, 0) + 1
 	_update_reputation(g.satisfaction)
+	_remember_visit(g, "Se fue sin comer: %s" % reason.to_lower())
 	_leave(g)
 
 
@@ -881,7 +929,7 @@ func _end_waiter_task(w) -> void:
 func _take_order(g: CustomerGroup) -> void:
 	var longest_prep := 0.0
 	for i in g.size:
-		var recipe_id := _choose_dish()
+		var recipe_id := _choose_dish(g.person(i))
 		if recipe_id == "":
 			_leave_angry(g, "No quedaba comida")
 			return
@@ -889,23 +937,32 @@ func _take_order(g: CustomerGroup) -> void:
 		inventory.consume(recipe)
 		g.dishes.append(recipe_id)
 		g.bill += menu[recipe_id]
-		g.fair_bill += float(recipe["precio_sugerido"])
+		g.fair_bill += float(recipe["precio_sugerido"]) * price_level
 		longest_prep = maxf(longest_prep, float(recipe["tiempo_prep_min"]))
 		kitchen_queue.append({ "grupo": g, "receta": recipe_id })
 	g.food_patience_extra = longest_prep
 	g.set_state(CustomerGroup.State.ESPERANDO_COMIDA)
 
 
-## Elige un plato de la carta. Los platos caros respecto a su valor se piden menos.
-func _choose_dish() -> String:
+## Elige un plato de la carta. Los platos caros respecto a su valor se piden menos; cada
+## vecino además prefiere sus platos favoritos y evita lo que se sale de su presupuesto.
+func _choose_dish(who: Neighbor = null) -> String:
 	var options: Array[String] = []
 	var weights: Array[float] = []
 	var total := 0.0
 	for recipe_id in menu:
 		if not inventory.can_make(recipes[recipe_id]):
 			continue
-		var value: float = float(recipes[recipe_id]["precio_sugerido"]) / menu[recipe_id]
-		var weight := pow(clampf(value, 0.3, 2.0), 2.0)
+		var value: float = float(recipes[recipe_id]["precio_sugerido"]) * price_level / menu[recipe_id]
+		var sensitivity := 2.0
+		if who != null:
+			sensitivity *= who.factor("sensibilidad_precio")
+		var weight := pow(clampf(value, 0.3, 2.0), sensitivity)
+		if who != null:
+			if who.favorites.has(recipe_id):
+				weight *= 3.0
+			if menu[recipe_id] > who.budget:
+				weight *= pow(who.budget / menu[recipe_id], 3.0)
 		options.append(recipe_id)
 		weights.append(weight)
 		total += weight
@@ -931,7 +988,7 @@ func _drops_plate(w) -> bool:
 
 
 func _serve(g: CustomerGroup) -> void:
-	g.eat_time_left = rng.randf_range(20.0, 35.0) + 2.0 * g.size
+	g.eat_time_left = (rng.randf_range(20.0, 35.0) + 2.0 * g.size) * g.factor("estancia")
 	g.set_state(CustomerGroup.State.COMIENDO)
 
 
@@ -943,14 +1000,7 @@ func _charge(g: CustomerGroup) -> void:
 		for s in g.service_scores:
 			service += s
 		service /= g.service_scores.size()
-	g.satisfaction = Satisfaction.score({
-		"comida": g.food_quality_sum / maxi(1, g.dishes.size()),
-		"tiempo": clampf(100.0 - g.wait_penalty * 50.0, 0.0, 100.0),
-		"trato": service,
-		"ambiente": layout.ambiente,
-		"limpieza": cleanliness(),
-		"calidad_precio": Satisfaction.value_for_money(g.bill, g.fair_bill),
-	})
+	g.satisfaction = Satisfaction.score(satisfaction_parts(g, service))
 	# Lo que haya hecho el gestor por ellos (disculpas, invitaciones...) cuenta.
 	g.satisfaction = clampf(g.satisfaction + g.mood_bonus * 40.0, 0.0, 100.0)
 	if g.is_critic:
@@ -958,14 +1008,58 @@ func _charge(g: CustomerGroup) -> void:
 		reputation = clampf(reputation + (g.satisfaction / 100.0 - reputation) * 0.3, 0.0, 1.0)
 		announcement.emit("¡Era un crítico gastronómico! Su reseña: %.1f/5" % (1.0 + g.satisfaction / 25.0), g.members[0].last_cell)
 	# Las propinas son del personal, no entran en la caja del restaurante.
-	var tip := g.bill * maxf(0.0, (g.satisfaction - 70.0) / 300.0)
+	var tip := g.bill * maxf(0.0, (g.satisfaction - 70.0) / 300.0) * g.factor("propina")
 	finances.earn("ventas", g.bill)
 	day_stats["propinas_personal"] += tip
 	day_stats["grupos_servidos"] += 1
 	day_stats["clientes_servidos"] += g.size
 	day_stats["satisfaccion_total"] += g.satisfaction
 	_update_reputation(g.satisfaction)
+	_remember_visit(g, _visit_note(g, satisfaction_parts(g, service)))
 	_leave(g)
+
+
+## Cómo valora cada parte de la visita este grupo: lo exigente que es con la comida, lo
+## que le importa el ambiente o la limpieza y lo que mira el precio dependen de quiénes son.
+func satisfaction_parts(g: CustomerGroup, service: float) -> Dictionary:
+	var food := g.food_quality_sum / maxi(1, g.dishes.size())
+	return {
+		"comida": food - (g.factor("exigencia") - 1.0) * 30.0,
+		"tiempo": clampf(100.0 - g.wait_penalty * 50.0, 0.0, 100.0),
+		"trato": service,
+		"ambiente": 50.0 + (layout.ambiente - 50.0) * g.factor("valor_ambiente"),
+		"limpieza": 100.0 - (100.0 - cleanliness()) * g.factor("limpieza"),
+		"calidad_precio": Satisfaction.value_for_money(g.bill, g.fair_bill, g.factor("sensibilidad_precio")),
+	}
+
+
+## Lo que se lleva en la memoria: lo mejor o lo peor de la visita.
+func _visit_note(g: CustomerGroup, parts: Dictionary) -> String:
+	const PHRASES := {
+		"comida": ["La comida estaba floja", "La comida, buenísima"],
+		"tiempo": ["Esperó demasiado", "Le atendieron rápido"],
+		"trato": ["El servicio fue frío", "Le trataron de maravilla"],
+		"ambiente": ["El local no tenía ambiente", "Le encantó el ambiente"],
+		"limpieza": ["El local estaba sucio", "Todo estaba muy limpio"],
+		"calidad_precio": ["Le pareció caro", "Muy buen precio"],
+	}
+	var worst := ""
+	var best := ""
+	for k in parts:
+		if worst == "" or parts[k] < parts[worst]:
+			worst = k
+		if best == "" or parts[k] > parts[best]:
+			best = k
+	if g.satisfaction < 55.0 or parts[worst] < 35.0:
+		return PHRASES[worst][0]
+	return PHRASES[best][1]
+
+
+## Cada vecino del grupo recuerda cómo le fue (y eso decide si vuelve).
+func _remember_visit(g: CustomerGroup, note: String) -> void:
+	for p in g.people:
+		if p != null:
+			p.remember(day(), g.satisfaction, note)
 
 
 # --- Ánimo del personal ------------------------------------------------------------

@@ -37,6 +37,11 @@ var _said_label: Label
 var _text_label: Label
 var _options: GridContainer
 var _typing: Tween
+var _bubble: PanelContainer
+## Ficha de la persona (necesidades, rasgos, gustos...), alternativa a la conversación.
+var _sheet: VBoxContainer
+var _sheet_button: Button
+var _showing_sheet := false
 
 
 func _ready() -> void:
@@ -71,6 +76,12 @@ func _ready() -> void:
 	_chips.add_theme_constant_override("separation", 8)
 	_chips.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_chips)
+	_sheet_button = Button.new()
+	_sheet_button.custom_minimum_size = Vector2(150, 64)
+	_sheet_button.add_theme_font_size_override("font_size", 26)
+	_style_button(_sheet_button, Color("5c6bc0"), Color.WHITE, 32)
+	_sheet_button.pressed.connect(_toggle_sheet)
+	header.add_child(_sheet_button)
 	var close_button := Button.new()
 	close_button.text = "×"
 	close_button.custom_minimum_size = Vector2(64, 64)
@@ -80,9 +91,14 @@ func _ready() -> void:
 	header.add_child(close_button)
 
 	var bubble := PanelContainer.new()
+	_bubble = bubble
 	bubble.custom_minimum_size = Vector2(0, 130)
 	bubble.add_theme_stylebox_override("panel", _rounded(Color.WHITE, 24, Color(0, 0, 0, 0.12), 8, Color("e0e0e0"), 2, 24))
 	right.add_child(bubble)
+	_sheet = VBoxContainer.new()
+	_sheet.add_theme_constant_override("separation", 12)
+	_sheet.visible = false
+	right.add_child(_sheet)
 	var bubble_column := VBoxContainer.new()
 	bubble_column.add_theme_constant_override("separation", 6)
 	bubble.add_child(bubble_column)
@@ -148,6 +164,7 @@ func open(new_target: Dictionary) -> void:
 	_say(Conversation.opening(target, Game.sim))
 	_rebuild_options()
 	_refresh_chips()
+	_show_sheet(false)
 	if not visible:
 		show()
 		# Aparece con un fundido suave.
@@ -176,6 +193,8 @@ func _process(_delta: float) -> void:
 		_portrait_bot.eyes = Bot.Eyes.ENFADADO if mood < 0.35 else (Bot.Eyes.NORMAL if mood < 0.65 else Bot.Eyes.FELIZ)
 	if Engine.get_process_frames() % 20 == 0:
 		_refresh_chips()
+		if _showing_sheet:
+			_refresh_sheet()
 
 
 func _set_portrait() -> void:
@@ -230,6 +249,116 @@ func _choose(option_id: String, said: String, is_work: bool) -> void:
 	_rebuild_options()
 
 
+## Cambia entre la conversación y la ficha de la persona.
+func _toggle_sheet() -> void:
+	_show_sheet(not _showing_sheet)
+
+
+func _show_sheet(on: bool) -> void:
+	_showing_sheet = on
+	_sheet.visible = on
+	_bubble.visible = not on
+	_options.visible = not on
+	_sheet_button.text = "Hablar" if on else "Ficha"
+	if on:
+		_refresh_sheet()
+	_fit_height.call_deferred()
+
+
+## Ficha al estilo de los Sims: barras de necesidades, perfil, rasgos, gustos y recuerdos.
+func _refresh_sheet() -> void:
+	for child in _sheet.get_children():
+		_sheet.remove_child(child)
+		child.queue_free()
+	var data := PersonSheet.build(target, Game.sim)
+	if data.is_empty():
+		return
+	var head := Label.new()
+	head.text = data["resumen"]
+	head.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	head.add_theme_font_size_override("font_size", 25)
+	head.add_theme_color_override("font_color", Color("607d8b"))
+	_sheet.add_child(head)
+
+	var bars := GridContainer.new()
+	bars.columns = 2
+	bars.add_theme_constant_override("h_separation", 26)
+	bars.add_theme_constant_override("v_separation", 8)
+	_sheet.add_child(bars)
+	for need in data["necesidades"]:
+		bars.add_child(_need_bar(need[0], need[1], need[2]))
+
+	if not data["rasgos"].is_empty():
+		var traits := HFlowContainer.new()
+		traits.add_theme_constant_override("h_separation", 10)
+		traits.add_theme_constant_override("v_separation", 8)
+		_sheet.add_child(traits)
+		for t in data["rasgos"]:
+			traits.add_child(_trait_chip(t[0], t[1]))
+	var lines: Array[String] = []
+	if not data["gustos"].is_empty():
+		lines.append("Le gusta: " + ", ".join(data["gustos"]))
+	if data["opinion"] != "":
+		var opinion: String = data["opinion"]
+		if not data["recuerdos"].is_empty():
+			opinion += " · Recuerda: «%s»" % data["recuerdos"][0]
+		lines.append(opinion)
+	for line in lines:
+		var l := Label.new()
+		l.text = line
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_font_size_override("font_size", 25)
+		l.add_theme_color_override("font_color", INK)
+		_sheet.add_child(l)
+
+
+## Una barra de necesidad (verde llena, amarilla a medias, roja casi vacía).
+func _need_bar(title: String, value: float, detail: String) -> Control:
+	var row := HBoxContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 12)
+	var name_label := Label.new()
+	name_label.text = title
+	name_label.custom_minimum_size = Vector2(150, 0)
+	name_label.add_theme_font_size_override("font_size", 25)
+	name_label.add_theme_color_override("font_color", INK)
+	row.add_child(name_label)
+	var bar := ProgressBar.new()
+	bar.min_value = 0.0
+	bar.max_value = 1.0
+	bar.value = value
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(240, 26)
+	bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var color := Color("66bb6a") if value >= 0.6 else (Color("ffca28") if value >= 0.3 else Color("ef5350"))
+	bar.add_theme_stylebox_override("background", _rounded(Color("eceff1"), 13))
+	bar.add_theme_stylebox_override("fill", _rounded(color, 13))
+	row.add_child(bar)
+	var detail_label := Label.new()
+	detail_label.text = detail
+	detail_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	detail_label.clip_text = true
+	detail_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	detail_label.add_theme_font_size_override("font_size", 22)
+	detail_label.add_theme_color_override("font_color", Color("78909c"))
+	row.add_child(detail_label)
+	return row
+
+
+func _trait_chip(title: String, description: String) -> Control:
+	var pill := PanelContainer.new()
+	pill.add_theme_stylebox_override("panel", _rounded(Color("ede7f6"), 18, Color(0, 0, 0, 0), 0, Color(0, 0, 0, 0), 0, 16))
+	var label := RichTextLabel.new()
+	label.bbcode_enabled = true
+	label.fit_content = true
+	label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	label.add_theme_font_size_override("normal_font_size", 22)
+	label.add_theme_font_size_override("bold_font_size", 22)
+	label.add_theme_color_override("default_color", INK)
+	label.text = "[b]%s[/b] · %s" % [title, description]
+	pill.add_child(label)
+	return pill
+
 ## Lo que dice la persona, apareciendo letra a letra.
 func _say(text: String) -> void:
 	_text_label.text = "«%s»" % text
@@ -271,6 +400,9 @@ func _chip_list() -> Array:
 		var words := ["Enfadado", "Impaciente", "Contento", "Encantado"]
 		var word: String = words[0] if mood < 0.4 else (words[1] if mood < 0.65 else (words[2] if mood < 0.85 else words[3]))
 		list.append([word, mood_color])
+		var who: Neighbor = e.person(target.get("member", 0))
+		if who != null:
+			list.append([who.profile["nombre"], Color("d1d9ff")])
 		var state: String = e.state_name()
 		if CustomerGroup.PATIENCE.has(e.state):
 			state += " · %d min" % int(e.state_time)

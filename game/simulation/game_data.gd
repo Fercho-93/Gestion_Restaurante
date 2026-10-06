@@ -11,6 +11,11 @@ var recipes: Dictionary = {}
 var start: Dictionary = {}
 ## Llegada de clientes por hora y tamaño de los grupos.
 var demand: Dictionary = {}
+## Barrios donde se puede abrir el restaurante, en orden (id -> datos).
+var barrios: Dictionary = {}
+## Tipos de vecino (estudiante, ejecutivo...) y rasgos de carácter.
+var perfiles: Dictionary = {}
+var rasgos: Dictionary = {}
 
 
 func _ready() -> void:
@@ -22,13 +27,22 @@ func load_all() -> void:
 	recipes = _by_id(_load_json("recipes.json"))
 	start = _load_json("restaurant_start.json")
 	demand = _load_json("demand.json")
+	barrios = _by_id(_load_json("barrios.json"))
+	perfiles = _by_id(_load_json("perfiles.json"))
+	rasgos = _by_id(_load_json("rasgos.json"))
 	for error in validate():
 		push_error(error)
 
 
-## Todo lo que necesita RestaurantSim para arrancar.
-func sim_data() -> Dictionary:
-	return { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand }
+## Todo lo que necesita RestaurantSim para arrancar. Con un barrio, la clientela son sus
+## vecinos; sin él, clientes anónimos con la demanda genérica.
+func sim_data(barrio_id: String = "") -> Dictionary:
+	var data := { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand }
+	if barrios.has(barrio_id):
+		data["barrio"] = barrios[barrio_id]
+		data["perfiles"] = perfiles
+		data["rasgos"] = rasgos
+	return data
 
 
 ## Comprueba que el contenido es coherente. Devuelve la lista de errores.
@@ -45,6 +59,17 @@ func validate() -> Array[String]:
 	for ingredient_id in start.get("stock_objetivo", {}):
 		if not ingredients.has(ingredient_id):
 			errors.append("Stock objetivo de ingrediente desconocido '%s'" % ingredient_id)
+	for barrio_id in barrios:
+		for profile_id in barrios[barrio_id]["poblacion"]:
+			if not perfiles.has(profile_id):
+				errors.append("Barrio '%s' tiene un perfil desconocido '%s'" % [barrio_id, profile_id])
+	for profile_id in perfiles:
+		for trait_id in perfiles[profile_id]["rasgos"]:
+			if not rasgos.has(trait_id):
+				errors.append("Perfil '%s' usa un rasgo desconocido '%s'" % [profile_id, trait_id])
+		for recipe_id in perfiles[profile_id]["gustos"]:
+			if not recipes.has(recipe_id):
+				errors.append("Perfil '%s' le gusta una receta desconocida '%s'" % [profile_id, recipe_id])
 	return errors
 
 

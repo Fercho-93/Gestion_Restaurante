@@ -40,6 +40,9 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	_gestor.entity = sim.manager
 	add_child(_gestor)
 	_gestor.face_direction(TOWARDS_CAMERA)
+	var street := preload("res://scenes/world3d/street_life.gd").new()
+	add_child(street)
+	street.setup(sim)
 
 
 static func to_world(p: Vector2, y: float = 0.0) -> Vector3:

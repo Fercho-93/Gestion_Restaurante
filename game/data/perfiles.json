@@ -1,0 +1,65 @@
+[
+	{
+		"id": "estudiante", "nombre": "Estudiante",
+		"presupuesto": [7, 13], "paciencia": 1.0, "sensibilidad_precio": 1.7, "exigencia": 0.7,
+		"valor_ambiente": 0.8, "propina": 0.4, "estancia": 1.1,
+		"rasgos": { "ruidoso": 0.35, "sociable": 0.4, "tacano": 0.35, "impaciente": 0.15 },
+		"gustos": ["macarrones_queso", "tortilla_patatas", "pollo_asado"]
+	},
+	{
+		"id": "docente", "nombre": "Docente",
+		"presupuesto": [11, 18], "paciencia": 1.1, "sensibilidad_precio": 1.1, "exigencia": 1.0,
+		"valor_ambiente": 1.0, "propina": 0.9, "estancia": 1.0,
+		"rasgos": { "educado": 0.4, "tranquilo": 0.3, "quisquilloso": 0.15 },
+		"gustos": ["ensalada_mixta", "paella_marisco", "tortilla_patatas"]
+	},
+	{
+		"id": "joven_trabajador", "nombre": "Joven trabajador",
+		"presupuesto": [10, 17], "paciencia": 0.95, "sensibilidad_precio": 1.2, "exigencia": 0.95,
+		"valor_ambiente": 1.1, "propina": 0.9, "estancia": 1.0,
+		"rasgos": { "sociable": 0.4, "impaciente": 0.25, "goloso": 0.25 },
+		"gustos": ["pollo_asado", "macarrones_queso", "entrecot"]
+	},
+	{
+		"id": "oficinista", "nombre": "Oficinista",
+		"presupuesto": [10, 16], "paciencia": 0.75, "sensibilidad_precio": 1.15, "exigencia": 0.9,
+		"valor_ambiente": 0.8, "propina": 0.8, "estancia": 0.75,
+		"rasgos": { "impaciente": 0.45, "educado": 0.25, "tacano": 0.15 },
+		"gustos": ["ensalada_mixta", "pollo_asado", "tortilla_patatas"]
+	},
+	{
+		"id": "ejecutivo", "nombre": "Ejecutivo",
+		"presupuesto": [20, 40], "paciencia": 0.8, "sensibilidad_precio": 0.6, "exigencia": 1.3,
+		"valor_ambiente": 1.2, "propina": 1.3, "estancia": 0.9,
+		"rasgos": { "impaciente": 0.35, "quisquilloso": 0.3, "generoso": 0.25 },
+		"gustos": ["entrecot", "paella_marisco"]
+	},
+	{
+		"id": "jubilado", "nombre": "Jubilado",
+		"presupuesto": [12, 22], "paciencia": 1.35, "sensibilidad_precio": 1.2, "exigencia": 1.1,
+		"valor_ambiente": 1.1, "propina": 1.0, "estancia": 1.3,
+		"rasgos": { "tranquilo": 0.5, "educado": 0.35, "sociable": 0.3, "quisquilloso": 0.2 },
+		"gustos": ["paella_marisco", "pollo_asado", "flan"]
+	},
+	{
+		"id": "familia", "nombre": "Familia",
+		"presupuesto": [10, 18], "paciencia": 0.9, "sensibilidad_precio": 1.3, "exigencia": 1.0,
+		"valor_ambiente": 1.0, "propina": 0.9, "estancia": 1.2,
+		"rasgos": { "ruidoso": 0.35, "goloso": 0.45, "educado": 0.2 },
+		"gustos": ["macarrones_queso", "pollo_asado", "flan"]
+	},
+	{
+		"id": "sibarita", "nombre": "Sibarita",
+		"presupuesto": [25, 45], "paciencia": 1.1, "sensibilidad_precio": 0.5, "exigencia": 1.7,
+		"valor_ambiente": 1.4, "propina": 1.2, "estancia": 1.3,
+		"rasgos": { "quisquilloso": 0.5, "generoso": 0.3, "educado": 0.3 },
+		"gustos": ["paella_marisco", "entrecot"]
+	},
+	{
+		"id": "artista", "nombre": "Artista",
+		"presupuesto": [10, 20], "paciencia": 1.2, "sensibilidad_precio": 1.1, "exigencia": 1.1,
+		"valor_ambiente": 1.6, "propina": 1.0, "estancia": 1.4,
+		"rasgos": { "sociable": 0.5, "tranquilo": 0.3, "ruidoso": 0.15, "goloso": 0.2 },
+		"gustos": ["ensalada_mixta", "macarrones_queso", "paella_marisco"]
+	}
+]

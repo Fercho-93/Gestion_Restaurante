@@ -85,6 +85,8 @@ var child_timer := 0.0
 var complained := false
 ## Hasta qué minuto se les oye quejarse ("¡Oiga!").
 var shout_until := -1.0
+## Vecino (Neighbor) que es cada miembro, o null (niños, clientes anónimos).
+var people: Array = []
 
 
 func set_state(new_state: State) -> void:
@@ -130,6 +132,30 @@ func all_arrived() -> bool:
 		if not m.arrived():
 			return false
 	return true
+
+
+## Vecino que es el miembro `member` (o null si no se sabe quién es).
+func person(member: int) -> Neighbor:
+	return people[member] if member >= 0 and member < people.size() else null
+
+
+## Media del perfil y rasgos de los adultos del grupo para un efecto (1.0 si son anónimos).
+func factor(effect: String) -> float:
+	var total := 0.0
+	var count := 0
+	for p in people:
+		if p != null:
+			total += p.factor(effect)
+			count += 1
+	return total / count if count > 0 else 1.0
+
+
+## ¿Alguien del grupo tiene este rasgo?
+func has_trait(trait_id: String) -> bool:
+	for p in people:
+		if p != null and p.has_trait(trait_id):
+			return true
+	return false
 
 
 func state_name() -> String:
