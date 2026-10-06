@@ -10,6 +10,7 @@ extends CanvasLayer
 @onready var day_report: DayReport = %DayReport
 @onready var rotate_hint: Control = %RotateHint
 @onready var computer: ComputerScreen = %Computer
+@onready var dialogue: DialogueBox = %Dialogue
 @onready var top_bar: Control = $TopBar
 @onready var bottom_bar: Control = $BottomBar
 @onready var speed_buttons := {
@@ -27,9 +28,9 @@ func _ready() -> void:
 	Game.sim.day_closed.connect(_on_day_closed)
 	day_report.closed.connect(func(): Game.clock.set_speed(1))
 	Game.sim.manager_started_using.connect(_on_manager_started_using)
-	computer.closed.connect(func():
-		Game.sim.manager.stop_using()
-		show_info("Gestor: libre"))
+	Game.sim.manager_started_talking.connect(_on_manager_started_talking)
+	computer.closed.connect(_on_panel_closed)
+	dialogue.closed.connect(_on_panel_closed)
 	_on_speed_changed(Game.clock.speed)
 
 
@@ -38,6 +39,13 @@ func _process(_delta: float) -> void:
 	var window := get_viewport().get_visible_rect().size
 	rotate_hint.visible = window.x < window.y
 	var sim := Game.sim
+	# Si la conversación se corta (la persona se va, o mandas al gestor a otro sitio).
+	if dialogue.visible and sim.manager.state != Manager.State.HABLANDO:
+		dialogue.hide()
+		dialogue.target = {}
+		follow_manager()
+	if _follow_manager:
+		info_label.text = "Gestor: " + sim.manager.describe()
 	time_label.text = Game.clock.get_time_text()
 	money_label.text = "%s €" % format_money(sim.finances.money)
 	rating_label.text = "Reputación %.1f/5" % sim.average_stars()
@@ -47,21 +55,43 @@ func _process(_delta: float) -> void:
 		sim.day_stats["grupos_perdidos"], sim.kitchen_queue.size() + _dishes_cooking()]
 
 
+## Si es true, el texto de arriba muestra en directo lo que hace el gestor.
+var _follow_manager := false
+
+
 func show_info(text: String) -> void:
 	info_label.text = text
+	_follow_manager = false
+
+
+## Muestra en directo lo que está haciendo el gestor.
+func follow_manager() -> void:
+	_follow_manager = true
 
 
 ## ¿Hay interfaz bajo ese punto de la pantalla? (para no mover al gestor al tocar botones)
 func blocks_point(screen_pos: Vector2) -> bool:
 	if computer.visible or day_report.is_visible_in_tree() or rotate_hint.visible:
 		return true
+	if dialogue.visible and dialogue.get_global_rect().has_point(screen_pos):
+		return true
 	return top_bar.get_global_rect().has_point(screen_pos) or bottom_bar.get_global_rect().has_point(screen_pos)
+
+
+func _on_manager_started_talking(target: Dictionary) -> void:
+	dialogue.open(target)
+	follow_manager()
+
+
+func _on_panel_closed() -> void:
+	Game.sim.stop_manager()
+	follow_manager()
 
 
 func _on_manager_started_using(object_id: String) -> void:
 	if object_id == "ordenador":
-		show_info("Gestor: en el ordenador")
 		computer.open()
+		follow_manager()
 
 
 func _dishes_cooking() -> int:

@@ -21,6 +21,8 @@ func _initialize() -> void:
 	test_bot_builds_for_every_role()
 	test_manager_walks_and_uses_computer()
 	test_tap_detector()
+	test_manager_avoids_obstacles()
+	test_manager_talks()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -269,34 +271,113 @@ func test_camera_follows_fingers() -> void:
 func test_manager_walks_and_uses_computer() -> void:
 	var sim := RestaurantSim.new(load_data(), 9 * 60, 7)
 	var m := sim.manager
-	check(m.mover.cell() == sim.layout.manager_home, "el gestor empieza en su sitio")
-	check(sim.layout.objects.has("ordenador"), "hay un ordenador en el local")
-	check(sim.layout.zone_name_at(sim.layout.objects["ordenador"]["uso"]) == "Despacho", "el ordenador está en el despacho")
+	var layout := sim.layout
+	check(m.mover.cell() == layout.manager_home, "el gestor empieza en su sitio")
+	check(layout.zone_name_at(layout.objects["ordenador"]["uso"]) == "Despacho", "el ordenador está en el despacho")
 	# Andar a una celda libre.
-	m.walk_to(sim.layout, Vector2i(1, 1))
+	sim.order_manager_walk(Vector2i(0, 0))
 	for i in 200:
 		sim.update(0.25)
-	check(m.mover.cell() == Vector2i(1, 1) and m.state == Manager.State.LIBRE, "el gestor llega adonde se le manda")
-	# Mandarlo a una mesa: va a la celda libre más cercana.
-	var table: Vector2i = sim.layout.tables[0].cell
-	m.walk_to(sim.layout, table)
+	check(m.mover.cell() == Vector2i(0, 0) and m.state == Manager.State.LIBRE, "el gestor llega adonde se le manda")
+	# Mandarlo a una mesa o a una silla: se queda al lado.
+	var table: RestaurantLayout.Table = layout.tables[0]
+	sim.order_manager_walk(table.seats[0])
 	for i in 200:
 		sim.update(0.25)
-	check(m.mover.cell() != table and m.mover.cell().distance_to(table) <= 1.5, "si tocas una mesa, se queda al lado")
-	# Usar el ordenador: llega, se sienta y avisa.
+	check(layout.manager_can_stand(m.mover.cell()) and m.mover.cell().distance_to(table.seats[0]) <= 1.5, "si tocas una silla, se queda al lado")
+	# Usar el ordenador: llega, se sienta y avisa una vez.
 	var used: Array[String] = []
 	sim.manager_started_using.connect(func(id: String): used.append(id))
-	m.go_use(sim.layout, "ordenador")
+	sim.order_manager_use("ordenador")
 	for i in 400:
 		sim.update(0.25)
 	check(used == ["ordenador"], "avisa una sola vez de que usa el ordenador")
-	check(m.state == Manager.State.USANDO and m.mover.cell() == sim.layout.objects["ordenador"]["uso"], "está sentado en el ordenador")
-	m.stop_using()
-	check(m.state == Manager.State.LIBRE and m.using == "", "se levanta del ordenador")
+	check(m.state == Manager.State.USANDO and m.mover.cell() == layout.objects["ordenador"]["uso"], "está sentado en el ordenador")
+	sim.stop_manager()
+	check(m.state == Manager.State.LIBRE, "se levanta del ordenador")
 	# En pausa (sin avanzar la simulación) la orden espera.
 	var before := m.mover.pos
-	m.walk_to(sim.layout, Vector2i(3, 3))
+	sim.order_manager_walk(Vector2i(3, 3))
 	check(m.mover.pos == before and m.state == Manager.State.ANDANDO, "en pausa la orden queda pendiente")
+
+
+func test_manager_avoids_obstacles() -> void:
+	var sim := RestaurantSim.new(load_data(), 9 * 60, 7)
+	var layout := sim.layout
+	var m := sim.manager
+	# Cruzar el comedor de punta a punta: nunca pisa mesas, sillas ni muebles.
+	for target in [Vector2i(0, 9), Vector2i(7, 0), Vector2i(0, 0), Vector2i(10, 2), Vector2i(9, 8)]:
+		sim.order_manager_walk(target)
+		var ok := true
+		for i in 400:
+			sim.update(0.1)
+			var c := m.mover.cell()
+			if not layout.manager_can_stand(c):
+				ok = false
+		check(ok, "camino hasta %s sin atravesar muebles" % target)
+		check(m.mover.cell() == target, "llega a %s" % target)
+	check(layout.zone_name_at(Vector2i(10, 2)) == "Cocina", "se puede entrar en la cocina por la puerta")
+	# Las personas cortan el paso: el camino las rodea.
+	var path := layout.manager_path(Vector2i(0, 0), Vector2i(0, 4), [Vector2i(0, 2)])
+	check(not path.is_empty() and not path.has(Vector2i(0, 2)), "el camino rodea a una persona")
+	# Si alguien se queda en medio, espera o rodea, pero no lo atraviesa.
+	m.mover.pos = Vector2(0, 0)
+	sim.order_manager_walk(Vector2i(0, 9))
+	var blocker := Vector2i(0, 4)
+	var crossed := false
+	for i in 300:
+		var event := m.step(0.1, layout, [blocker] as Array[Vector2i])
+		if m.mover.cell() == blocker:
+			crossed = true
+	check(not crossed, "no atraviesa a una persona parada en el camino")
+	check(m.mover.cell() == Vector2i(0, 9), "la rodea y llega")
+
+
+func test_manager_talks() -> void:
+	var sim := RestaurantSim.new(load_data(), 11 * 60 + 30, 3)
+	var talks: Array[Dictionary] = []
+	sim.manager_started_talking.connect(func(t: Dictionary): talks.append(t))
+	# Hablar con un camarero: va hasta él y el camarero se para.
+	var waiter := sim.waiters()[0]
+	sim.order_manager_talk(waiter)
+	for i in 300:
+		sim.update(0.1)
+		if not talks.is_empty():
+			break
+	check(talks.size() == 1 and talks[0]["entity"] == waiter, "llega a hablar con el camarero")
+	check(waiter.talking and sim.manager.state == Manager.State.HABLANDO, "el camarero se para a hablar")
+	check(sim.manager.mover.pos.distance_to(waiter.mover.pos) <= Manager.TALK_DISTANCE, "hablan cerca el uno del otro")
+	var opening := Conversation.opening(talks[0], sim)
+	check(opening.length() > 5, "el camarero responde: " + opening)
+	for option in Conversation.options(talks[0]):
+		check(Conversation.reply(talks[0], option["id"], sim) != "", "respuesta a '%s'" % option["texto"])
+	sim.stop_manager()
+	check(not waiter.talking, "al terminar, el camarero vuelve al trabajo")
+	# Hablar con clientes en distintos momentos de su visita.
+	var states_seen := {}
+	for i in 6000:
+		sim.update(0.25)
+		for g in sim.groups:
+			var target := { "entity": g, "member": 0 }
+			states_seen[g.state] = true
+			check(Conversation.opening(target, sim) != "", "el cliente siempre dice algo")
+			for option in Conversation.options(target):
+				check(Conversation.reply(target, option["id"], sim) != "", "y siempre responde")
+	check(states_seen.has(CustomerGroup.State.COMIENDO), "se ha probado a hablar con clientes comiendo")
+	# Ir a hablar con un cliente que se mueve.
+	var g: CustomerGroup = null
+	for candidate in sim.groups:
+		if candidate.state != CustomerGroup.State.SALIENDO:
+			g = candidate
+			break
+	if g != null:
+		talks.clear()
+		sim.order_manager_talk(g, 0)
+		for i in 600:
+			sim.update(0.1)
+			if not talks.is_empty() or sim.manager.state == Manager.State.LIBRE:
+				break
+		check(not talks.is_empty() or sim.manager.notice != "", "llega a hablar con el cliente o avisa de por qué no")
 
 
 func _tap_event(index: int, pos: Vector2, pressed: bool) -> InputEventScreenTouch:

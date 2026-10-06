@@ -24,7 +24,9 @@
 			{ "celda": [2, 8], "plazas": 2 },
 			{ "celda": [5, 8], "plazas": 2 }
 		],
-		"barra_cocina": [[8, 0], [8, 1], [8, 3], [8, 4], [8, 5], [8, 2]],
+		"barra_cocina": [[8, 0], [8, 1], [8, 2], [8, 3], [8, 4]],
+		"puerta_cocina": [8, 5],
+		"obstaculos": [[11, 8], [11, 9]],
 		"pase": [7, 2],
 		"puesto_camareros": [7, 4],
 		"puesto_gestor": [6, 7],

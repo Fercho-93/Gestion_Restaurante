@@ -7,6 +7,8 @@ signal day_closed(report: Dictionary)
 signal group_left(group: CustomerGroup)
 ## El gestor ha llegado a un objeto y empieza a usarlo (p. ej. "ordenador").
 signal manager_started_using(object_id: String)
+## El gestor ha llegado junto a alguien y empieza a hablar: {entity, member}.
+signal manager_started_talking(target: Dictionary)
 
 const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
@@ -86,9 +88,7 @@ func update(dt: float) -> void:
 	_update_groups(dt)
 	_update_waiters(dt)
 	_update_cooks(dt)
-	var used := manager.step(dt)
-	if used != "":
-		manager_started_using.emit(used)
+	_update_manager(dt)
 	groups = groups.filter(func(g: CustomerGroup): return g.state != CustomerGroup.State.FUERA)
 	if _crossed(previous, minutes, 0):
 		_close_day()
@@ -120,6 +120,83 @@ func customers_inside() -> int:
 
 func average_stars() -> float:
 	return 1.0 + reputation * 4.0
+
+
+# --- Gestor -----------------------------------------------------------------
+
+func order_manager_walk(cell: Vector2i) -> void:
+	_end_talk()
+	manager.walk_to(layout, cell, occupied_cells())
+
+
+func order_manager_use(object_id: String) -> void:
+	_end_talk()
+	manager.go_use(layout, object_id, occupied_cells())
+
+
+## Ir a hablar con alguien: entity es un CustomerGroup (con el índice del miembro) o un
+## StaffMember.
+func order_manager_talk(entity, member: int = 0) -> void:
+	_end_talk()
+	var target := { "entity": entity, "member": member }
+	var cell = person_cell(target)
+	if cell != null:
+		manager.go_talk(layout, target, cell, occupied_cells(target))
+
+
+## El gestor deja lo que estaba haciendo (levantarse, terminar la conversación).
+func stop_manager() -> void:
+	_end_talk()
+	manager.stop()
+
+
+## Celda donde está una persona ({entity, member}), o null si ya no está en el local.
+func person_cell(target: Dictionary):
+	var e = target["entity"]
+	if e is StaffMember:
+		return e.mover.cell() if staff.has(e) else null
+	if e is CustomerGroup:
+		if not groups.has(e) or e.state == CustomerGroup.State.FUERA:
+			return null
+		return e.members[target["member"]].cell()
+	return null
+
+
+## Celdas ocupadas por personas (para que el gestor no las atraviese).
+func occupied_cells(except: Dictionary = {}) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for s in staff:
+		if except.get("entity") != s:
+			cells.append(s.mover.cell())
+	for g in groups:
+		for i in g.members.size():
+			if except.get("entity") != g or except.get("member") != i:
+				cells.append(g.members[i].cell())
+	return cells
+
+
+func _update_manager(dt: float) -> void:
+	var target: Dictionary = manager.talk_target
+	if manager.state == Manager.State.HABLANDO:
+		target = manager.talking_to
+		if person_cell(target) == null:
+			stop_manager()
+			manager.notice = "Se ha ido"
+			return
+	var event := manager.step(dt, layout, occupied_cells(target), person_cell(target) if not target.is_empty() else null)
+	if event.has("usar"):
+		manager_started_using.emit(event["usar"])
+	elif event.has("hablar"):
+		var who = event["hablar"]["entity"]
+		if who is StaffMember:
+			who.talking = true
+		manager_started_talking.emit(event["hablar"])
+
+
+func _end_talk() -> void:
+	var who = manager.talking_to.get("entity")
+	if who is StaffMember:
+		who.talking = false
 
 
 # --- Clientes ---------------------------------------------------------------
@@ -234,6 +311,8 @@ func _update_reputation(satisfaction: float) -> void:
 
 func _update_waiters(dt: float) -> void:
 	for w in waiters():
+		if w.talking:
+			continue
 		w.mover.step(dt)
 		if w.task.is_empty():
 			_assign_waiter_task(w)

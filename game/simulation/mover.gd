@@ -32,6 +32,13 @@ func go_to(layout: RestaurantLayout, target: Vector2i) -> void:
 		path.pop_front()
 
 
+## Sigue un camino ya calculado (la primera celda se salta si ya está en ella).
+func set_path(new_path: Array[Vector2i]) -> void:
+	path = new_path.duplicate()
+	if not path.is_empty() and pos == Vector2(path[0]):
+		path.pop_front()
+
+
 func is_moving() -> bool:
 	return not path.is_empty()
 

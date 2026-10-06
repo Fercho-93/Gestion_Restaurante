@@ -39,9 +39,14 @@ var manager_home: Vector2i
 var objects: Dictionary = {}
 var cook_stations: Array[Vector2i] = []
 var counter_cells: Array[Vector2i] = []
+## Muebles que no se pueden atravesar (fogones, estanterías, plantas...).
+var obstacles: Array[Vector2i] = []
 var ambiente: float
 var limpieza: float
 var astar := AStarGrid2D.new()
+## Rejilla del gestor: además de lo anterior, las sillas también son obstáculos
+## (los clientes sí necesitan llegar a ellas para sentarse).
+var manager_astar := AStarGrid2D.new()
 
 
 func _init(d: Dictionary) -> void:
@@ -61,6 +66,11 @@ func _init(d: Dictionary) -> void:
 		cook_stations.append(v2i(c))
 	for c in d["barra_cocina"]:
 		counter_cells.append(v2i(c))
+	for c in d.get("obstaculos", []):
+		obstacles.append(v2i(c))
+	# El fogón está junto a cada puesto de cocina.
+	for c in cook_stations:
+		obstacles.append(c + Vector2i(1, 0))
 	for z in d["zonas"]:
 		var r: Array = z["rect"]
 		zones.append({
@@ -81,19 +91,64 @@ func _init(d: Dictionary) -> void:
 
 
 func _build_navigation() -> void:
-	astar.region = region
-	astar.cell_size = Vector2.ONE
-	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
-	astar.update()
-	for zone in zones:
-		if zone["bloqueada"]:
-			astar.fill_solid_region(zone["rect"])
-	for c in counter_cells:
-		astar.set_point_solid(c)
+	for grid in [astar, manager_astar]:
+		grid.region = region
+		grid.cell_size = Vector2.ONE
+		grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+		grid.update()
+		for zone in zones:
+			if zone["bloqueada"]:
+				grid.fill_solid_region(zone["rect"])
+		for c in counter_cells + obstacles:
+			grid.set_point_solid(c)
+		for table in tables:
+			grid.set_point_solid(table.cell)
+		for o in objects.values():
+			grid.set_point_solid(o["celda"])
 	for table in tables:
-		astar.set_point_solid(table.cell)
+		for seat in table.seats:
+			manager_astar.set_point_solid(seat)
+	# La silla del ordenador: el gestor sí se sienta en ella.
 	for o in objects.values():
-		astar.set_point_solid(o["celda"])
+		manager_astar.set_point_solid(o["uso"], false)
+
+
+## Camino del gestor esquivando muebles y las celdas ocupadas por personas.
+## Vacío si no hay camino.
+func manager_path(from: Vector2i, to: Vector2i, occupied: Array[Vector2i] = []) -> Array[Vector2i]:
+	if not region.has_point(from) or not region.has_point(to):
+		return []
+	var blocked: Array[Vector2i] = []
+	for c in occupied:
+		if c != from and c != to and region.has_point(c) and not manager_astar.is_point_solid(c):
+			manager_astar.set_point_solid(c)
+			blocked.append(c)
+	var path := manager_astar.get_id_path(from, to)
+	for c in blocked:
+		manager_astar.set_point_solid(c, false)
+	return path
+
+
+func manager_can_stand(cell: Vector2i) -> bool:
+	return region.has_point(cell) and not manager_astar.is_point_solid(cell)
+
+
+## Celda libre para el gestor más cercana a `cell` (y, a igualdad, a `from`).
+func nearest_manager_cell(cell: Vector2i, from: Vector2i, occupied: Array[Vector2i] = []) -> Vector2i:
+	if manager_can_stand(cell) and not occupied.has(cell):
+		return cell
+	var best := cell
+	var best_d := INF
+	for dx in range(-3, 4):
+		for dy in range(-3, 4):
+			var c := cell + Vector2i(dx, dy)
+			if not manager_can_stand(c) or occupied.has(c):
+				continue
+			var d := Vector2(dx, dy).length() + Vector2(c - from).length() * 0.01
+			if d < best_d:
+				best = c
+				best_d = d
+	return best
 
 
 ## Camino de celdas entre dos puntos (incluye el origen). Vacío si no hay camino.
@@ -105,22 +160,6 @@ func find_path(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 
 func is_walkable(cell: Vector2i) -> bool:
 	return region.has_point(cell) and not astar.is_point_solid(cell)
-
-
-## La celda transitable más cercana (la propia si ya lo es).
-func nearest_walkable(cell: Vector2i) -> Vector2i:
-	if is_walkable(cell):
-		return cell
-	var best := cell
-	var best_d := INF
-	for dx in range(-3, 4):
-		for dy in range(-3, 4):
-			var c := cell + Vector2i(dx, dy)
-			var d := Vector2(dx, dy).length()
-			if d < best_d and is_walkable(c):
-				best = c
-				best_d = d
-	return best
 
 
 func zone_name_at(cell: Vector2i) -> String:

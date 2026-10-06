@@ -292,6 +292,13 @@ Hito 1 en curso:
   usarlo; las órdenes dadas en pausa se ejecutan al reanudar.
 - ✅ Despacho con ordenador; al sentarse se abre la gestión (Resumen en directo; Carta,
   Personal, Pedidos y Finanzas por hacer).
+- ✅ El gestor no atraviesa muebles, sillas ni personas: rodea o espera a que le dejen
+  pasar (y desiste si tardan demasiado). La cocina tiene puerta.
+- ✅ Hablar con la gente: tocar a un cliente o a un empleado hace que el gestor vaya
+  hasta él y se abra un cuadro de diálogo. Lo que dicen sale del estado real (esperas,
+  lo que han comido, precios, trabajo pendiente). Los camareros se paran a hablar.
+  De momento hablar solo informa; más adelante tendrá efectos (ánimo del cliente,
+  moral del empleado, quejas, propinas…).
 - Siguiente: Carta y precios.
 
 ## 11. Pendiente de decidir

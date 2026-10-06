@@ -23,8 +23,10 @@ var eyes := Eyes.FELIZ
 var carrying := false
 var eating := false
 var waving := false
-## Entidad de la simulación que representa (CustomerGroup, StaffMember o null si es el gestor).
+## Entidad de la simulación que representa (CustomerGroup, StaffMember o Manager).
 var entity = null
+## En un grupo de clientes, qué miembro es.
+var member_index := 0
 
 var _rig: Node3D
 var _torso: Node3D

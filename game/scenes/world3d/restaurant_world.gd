@@ -77,7 +77,9 @@ func _process(delta: float) -> void:
 		for i in g.members.size():
 			var key := "g%d_%d" % [g.id, i]
 			seen[key] = true
-			_sync_customer(_bot(key, Bot.Role.CLIENTE, g.id * 7 + i), g, i)
+			var bot := _bot(key, Bot.Role.CLIENTE, g.id * 7 + i)
+			bot.member_index = i
+			_sync_customer(bot, g, i)
 	for s in sim.staff:
 		var key := "s%d" % s.id
 		seen[key] = true
@@ -88,6 +90,7 @@ func _process(delta: float) -> void:
 			_bots[key].queue_free()
 			_bots.erase(key)
 	_update_gestor(delta)
+	_face_conversation()
 	# Marca en el suelo el destino del gestor mientras camina.
 	var path := sim.manager.mover.path
 	_selection.visible = not path.is_empty()
@@ -145,6 +148,20 @@ func _sync_staff(bot: Bot, s: StaffMember) -> void:
 		bot.face_direction(Vector3(1, 0, 0))
 	else:
 		bot.face_direction(TOWARDS_CAMERA)
+
+
+## Durante una conversación, el gestor y la otra persona se miran.
+func _face_conversation() -> void:
+	var m := sim.manager
+	if m.state != Manager.State.HABLANDO:
+		return
+	var e = m.talking_to["entity"]
+	var key := "s%d" % e.id if e is StaffMember else "g%d_%d" % [e.id, m.talking_to["member"]]
+	if not _bots.has(key):
+		return
+	var other: Bot = _bots[key]
+	_gestor.face_direction(other.position - _gestor.position)
+	other.face_direction(_gestor.position - other.position)
 
 
 ## El gestor saluda cada vez que llega un grupo nuevo.

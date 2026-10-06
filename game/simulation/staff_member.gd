@@ -17,6 +17,8 @@ var mover: Mover
 var task: Dictionary = {}
 ## Cocineros: platos que está preparando [{grupo, receta, tiempo}].
 var tickets: Array[Dictionary] = []
+## Está hablando con el gestor (los camareros se paran mientras tanto).
+var talking := false
 
 
 func _init(d: Dictionary, staff_id: int, start_cell: Vector2i) -> void:

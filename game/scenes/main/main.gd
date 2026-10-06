@@ -32,18 +32,30 @@ func _on_tap(screen_pos: Vector2) -> void:
 	var object_id: String = world.object_at(camera, screen_pos)
 	var bot: Bot = world.person_at(camera, screen_pos)
 	if bot != null and object_id == "":
-		hud.show_info(_describe(bot))
+		if bot.role == Bot.Role.GESTOR:
+			hud.show_info(_describe(bot))
+		else:
+			sim.order_manager_talk(bot.entity, bot.member_index)
+			sim.manager.talk_name = _short_name(bot)
+			hud.follow_manager()
 		return
 	if object_id != "":
-		sim.manager.go_use(sim.layout, object_id)
-		hud.show_info("Gestor: %s" % sim.manager.describe())
+		sim.order_manager_use(object_id)
+		hud.follow_manager()
 		return
 	var ground := camera.screen_to_ground(screen_pos)
 	var cell := Vector2i(roundi(ground.x), roundi(ground.z))
 	if not sim.layout.region.has_point(cell):
 		return
-	sim.manager.walk_to(sim.layout, cell)
-	hud.show_info("Gestor: va a %s" % sim.layout.zone_name_at(sim.layout.nearest_walkable(cell)))
+	sim.order_manager_walk(cell)
+	sim.manager.walk_zone = sim.layout.zone_name_at(sim.manager.destination)
+	hud.follow_manager()
+
+
+func _short_name(bot: Bot) -> String:
+	if bot.entity is StaffMember:
+		return bot.entity.nombre
+	return Conversation.customer_name(bot.entity, bot.member_index)
 
 
 func _describe(bot: Bot) -> String:
