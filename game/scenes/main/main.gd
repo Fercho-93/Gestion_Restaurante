@@ -6,9 +6,7 @@ extends Node3D
 @onready var sun: DirectionalLight3D = $Sun
 @onready var hud: HUD = $HUD
 
-var _press_position := Vector2.ZERO
-## Si en el gesto ha habido dos dedos (pellizco), al soltar no es un toque.
-var _multi_touch := false
+var _taps := TapDetector.new()
 
 
 func _ready() -> void:
@@ -18,16 +16,11 @@ func _ready() -> void:
 	hud.show_info("Toca el suelo para mover al gestor · el ordenador del despacho para gestionar")
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventScreenTouch:
-		return
-	if event.index > 0:
-		_multi_touch = true
-	elif event.pressed:
-		_press_position = event.position
-		_multi_touch = false
-	elif not _multi_touch and event.position.distance_to(_press_position) < camera.tap_slop():
-		_on_tap(event.position)
+# En _input (y no _unhandled_input) para ver también los arrastres que usa la cámara.
+func _input(event: InputEvent) -> void:
+	var tap = _taps.feed(event, camera.tap_slop())
+	if tap != null:
+		_on_tap(tap)
 
 
 ## Un toque en el mundo: el ordenador se usa, las personas se consultan y el suelo es

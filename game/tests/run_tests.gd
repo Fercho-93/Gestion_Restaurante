@@ -20,6 +20,7 @@ func _initialize() -> void:
 	test_full_day_simulation()
 	test_bot_builds_for_every_role()
 	test_manager_walks_and_uses_computer()
+	test_tap_detector()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -296,3 +297,43 @@ func test_manager_walks_and_uses_computer() -> void:
 	var before := m.mover.pos
 	m.walk_to(sim.layout, Vector2i(3, 3))
 	check(m.mover.pos == before and m.state == Manager.State.ANDANDO, "en pausa la orden queda pendiente")
+
+
+func _tap_event(index: int, pos: Vector2, pressed: bool) -> InputEventScreenTouch:
+	var e := InputEventScreenTouch.new()
+	e.index = index
+	e.position = pos
+	e.pressed = pressed
+	return e
+
+
+func _drag_event(index: int, pos: Vector2) -> InputEventScreenDrag:
+	var e := InputEventScreenDrag.new()
+	e.index = index
+	e.position = pos
+	return e
+
+
+func test_tap_detector() -> void:
+	var slop := 30.0
+	# Los navegadores de móvil numeran los dedos como quieren: 0, 7, números enormes...
+	for finger in [0, 7, 1234567]:
+		var t := TapDetector.new()
+		check(t.feed(_tap_event(finger, Vector2(100, 100), true), slop) == null, "apoyar no es aún un toque")
+		t.feed(_drag_event(finger, Vector2(108, 104)), slop)
+		var tap = t.feed(_tap_event(finger, Vector2(110, 105), false), slop)
+		check(tap == Vector2(110, 105), "toque con el dedo %d y temblor pequeño" % finger)
+	# Un arrastre largo no es un toque, aunque el dedo vuelva al sitio.
+	var t := TapDetector.new()
+	t.feed(_tap_event(3, Vector2(100, 100), true), slop)
+	t.feed(_drag_event(3, Vector2(200, 100)), slop)
+	t.feed(_drag_event(3, Vector2(101, 100)), slop)
+	check(t.feed(_tap_event(3, Vector2(101, 100), false), slop) == null, "un arrastre no es un toque")
+	# Un pellizco no es un toque, se suelte el dedo que se suelte primero.
+	t.feed(_tap_event(4, Vector2(100, 100), true), slop)
+	t.feed(_tap_event(9, Vector2(300, 100), true), slop)
+	check(t.feed(_tap_event(9, Vector2(300, 100), false), slop) == null, "soltar un dedo del pellizco no es un toque")
+	check(t.feed(_tap_event(4, Vector2(100, 100), false), slop) == null, "soltar el otro dedo tampoco")
+	# Y después del pellizco, un toque normal vuelve a funcionar.
+	t.feed(_tap_event(11, Vector2(50, 50), true), slop)
+	check(t.feed(_tap_event(11, Vector2(52, 51), false), slop) == Vector2(52, 51), "tras un pellizco, los toques siguen funcionando")
