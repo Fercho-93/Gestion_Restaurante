@@ -14,6 +14,7 @@ func _ready() -> void:
 	world.setup(Game.sim)
 	camera.focus(Vector3(Game.sim.layout.size.x / 2.0 - 1.0, 0, Game.sim.layout.size.y / 2.0))
 	hud.show_info("Toca: suelo = ir · persona = hablar · a ti = trabajar")
+	hud.toasts.pressed.connect(func(cell: Vector2i): camera.focus(Vector3(cell.x, 0, cell.y)))
 
 
 # En _input (y no _unhandled_input) para ver también los arrastres que usa la cámara.

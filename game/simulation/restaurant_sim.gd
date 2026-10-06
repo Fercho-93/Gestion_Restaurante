@@ -9,6 +9,8 @@ signal group_left(group: CustomerGroup)
 signal manager_started_using(object_id: String)
 ## El gestor ha llegado junto a alguien y empieza a hablar: {entity, member}.
 signal manager_started_talking(target: Dictionary)
+## Algo que merece un aviso en pantalla (un plato que se cae, un crítico...).
+signal announcement(text: String, cell: Vector2i)
 
 const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
@@ -22,6 +24,9 @@ const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "acomodar": 2, "pedido": 3,
 const CLEANING_TASKS := ["recoger_mesa", "fregar"]
 ## Manchas en el suelo como mucho (y cuánto restan a la limpieza cada una).
 const MAX_STAINS := 12
+const REGULAR_NAMES := ["Don Ramón", "Doña Encarna", "Pepe el del quiosco", "Sofía", "Tomás", "Luisa"]
+## Lo que cuesta la tarta de cumpleaños que invita la casa.
+const CAKE_COST := 6.0
 ## Tráfico: si alguien no puede avanzar, cada tanto busca otro camino; si sigue
 ## atascado, se aparta a un lado; y como último recurso pasa igualmente.
 const REPLAN_EVERY := 0.5
@@ -413,7 +418,22 @@ func _spawn_customers(dt: float) -> void:
 			var member := Mover.new(layout.spawn_cell, Mover.BASE_SPEED * rng.randf_range(0.8, 1.0))
 			member.jitter = Vector2(rng.randf_range(-0.25, 0.25), rng.randf_range(-0.25, 0.25))
 			g.members.append(member)
+		_give_personality(g)
 		groups.append(g)
+
+
+## Algunos grupos son especiales: habituales, críticos, cumpleaños, familias con niños.
+func _give_personality(g: CustomerGroup) -> void:
+	if g.size >= 3 and rng.randf() < 0.45:
+		g.child_member = g.size - 1
+	if g.size >= 3 and rng.randf() < 0.08:
+		g.birthday = true
+	if g.size == 1 and rng.randf() < 0.06:
+		g.is_critic = true
+	elif reputation > 0.45 and rng.randf() < 0.12:
+		g.regular_name = REGULAR_NAMES[rng.randi() % REGULAR_NAMES.size()]
+		g.mood_bonus += 0.1
+		announcement.emit("Ha llegado %s, cliente habitual" % g.regular_name, layout.spawn_cell)
 
 
 func _update_groups(dt: float) -> void:
@@ -440,6 +460,59 @@ func _update_groups(dt: float) -> void:
 					g.set_state(CustomerGroup.State.FUERA)
 		if g.is_fed_up():
 			_leave_angry(g, _fed_up_reason(g))
+
+
+## Un niño que se aburre esperando la comida se levanta a corretear y luego vuelve.
+func _update_child(g: CustomerGroup, dt: float) -> void:
+	if g.child_member < 0 or g.table == null:
+		return
+	var kid := g.members[g.child_member]
+	var seat := g.table.seats[g.child_member]
+	var waiting_food := g.state == CustomerGroup.State.ESPERANDO_COMIDA
+	match g.child_state:
+		"":
+			if waiting_food and kid.arrived() and kid.last_cell == seat:
+				g.child_timer += dt
+				if g.child_timer > 6.0 and rng.randf() < dt * 0.15:
+					var spot := _random_free_cell_near(g.table.cell, 3)
+					if spot != Vector2i(-999, -999):
+						kid.go_to(layout, spot)
+						g.child_state = "jugando"
+						g.child_timer = 0.0
+		"jugando":
+			g.child_timer += dt
+			if not waiting_food or (kid.arrived() and g.child_timer > 2.5):
+				kid.go_to(layout, seat)
+				g.child_state = "volviendo"
+		"volviendo":
+			if kid.arrived() and kid.last_cell == seat:
+				g.child_state = ""
+				g.child_timer = 0.0
+
+
+func _random_free_cell_near(center: Vector2i, radius: int) -> Vector2i:
+	var options: Array[Vector2i] = []
+	var taken := cells_taken_by_others("")
+	for dx in range(-radius, radius + 1):
+		for dy in range(-radius, radius + 1):
+			var c := center + Vector2i(dx, dy)
+			if c.x >= 0 and layout.can_stand(c) and not taken.has(c) and not stains.has(c):
+				options.append(c)
+	return options[rng.randi() % options.size()] if not options.is_empty() else Vector2i(-999, -999)
+
+
+## Un grupo muy enfadado se queja en voz alta y molesta a las mesas de al lado.
+func _maybe_complain(g: CustomerGroup) -> void:
+	if g.complained or g.table == null or not CustomerGroup.PATIENCE.has(g.state):
+		return
+	# Se quejan cuando la espera pasa de vez y media su paciencia (poco antes de irse).
+	if g.state_time < 1.5 * g.patience_limit() and g.mood() > 0.3:
+		return
+	g.complained = true
+	g.shout_until = minutes + 4.0
+	for other in groups:
+		if other != g and other.table != null and Vector2(other.table.cell).distance_to(Vector2(g.table.cell)) <= 3.5:
+			other.mood_bonus -= 0.04
 
 
 ## Los grupos que esperan mesa forman cola en la calle, en orden de llegada.
@@ -476,6 +549,8 @@ func first_in_queue() -> CustomerGroup:
 
 ## Lleva al grupo a su mesa (ya reservada en g.table).
 func _seat(g: CustomerGroup) -> void:
+	if g.birthday:
+		announcement.emit("¡Hay un cumpleaños en una mesa!", g.table.cell)
 	for i in g.members.size():
 		g.members[i].go_to(layout, g.table.seats[i])
 	g.set_state(CustomerGroup.State.YENDO_A_MESA)
@@ -702,8 +777,18 @@ func _finish_task(w) -> void:
 			g.service_scores.append(w.effective_trato())
 			_take_order(g)
 		"servir":
-			g.service_scores.append(w.effective_trato())
-			_serve(g)
+			if _drops_plate(w):
+				# Se repite el plato: vuelve a la cocina y el suelo queda manchado.
+				var who: String = w.nombre if w is StaffMember else "ti"
+				announcement.emit("¡A %s se le ha caído un plato!" % who if who != "ti" else "¡Se te ha caído un plato!", w.mover.last_cell)
+				g.food_quality_sum -= g.food_quality_sum / maxf(1.0, float(g.dishes_ready))
+				g.dishes_ready -= 1
+				kitchen_queue.append({ "grupo": g, "receta": g.dishes[0] })
+				g.mood_bonus -= 0.08
+				_add_stain_near(w.mover.last_cell)
+			else:
+				g.service_scores.append(w.effective_trato())
+				_serve(g)
 		"cobrar":
 			g.service_scores.append(w.effective_trato())
 			_charge(g)
@@ -775,6 +860,17 @@ func _choose_dish() -> String:
 	return options[-1]
 
 
+## ¿Se le cae el plato a quien sirve? Más probable con prisa o desanimado.
+func _drops_plate(w) -> bool:
+	var chance := 0.03
+	if w is StaffMember:
+		if w.now < w.rushed_until:
+			chance += 0.05
+		if w.moral < 40.0:
+			chance += 0.03
+	return rng.randf() < chance
+
+
 func _serve(g: CustomerGroup) -> void:
 	g.eat_time_left = rng.randf_range(20.0, 35.0) + 2.0 * g.size
 	g.set_state(CustomerGroup.State.COMIENDO)
@@ -798,6 +894,10 @@ func _charge(g: CustomerGroup) -> void:
 	})
 	# Lo que haya hecho el gestor por ellos (disculpas, invitaciones...) cuenta.
 	g.satisfaction = clampf(g.satisfaction + g.mood_bonus * 40.0, 0.0, 100.0)
+	if g.is_critic:
+		# La reseña de un crítico pesa como la de muchos clientes.
+		reputation = clampf(reputation + (g.satisfaction / 100.0 - reputation) * 0.3, 0.0, 1.0)
+		announcement.emit("¡Era un crítico gastronómico! Su reseña: %.1f/5" % (1.0 + g.satisfaction / 25.0), g.members[0].last_cell)
 	# Las propinas son del personal, no entran en la caja del restaurante.
 	var tip := g.bill * maxf(0.0, (g.satisfaction - 70.0) / 300.0)
 	finances.earn("ventas", g.bill)

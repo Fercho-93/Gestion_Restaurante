@@ -3,11 +3,12 @@ extends Node3D
 ## la simulación, colocado donde la simulación dice. Además, el gestor (el jugador).
 ## Una celda de la rejilla (x, y) mide 1 x 1 y está en el punto 3D (x, 0, y).
 
-## Estado del grupo -> texto del bocadillo (su color indica el ánimo).
-const BUBBLES := {
-	CustomerGroup.State.EN_COLA: "...",
+## Estado del grupo -> lo que piensan (su color indica el ánimo).
+const THOUGHTS := {
+	CustomerGroup.State.LLEGANDO: "reloj",
+	CustomerGroup.State.EN_COLA: "reloj",
 	CustomerGroup.State.ESPERANDO_PEDIR: "?",
-	CustomerGroup.State.ESPERANDO_COMIDA: "...",
+	CustomerGroup.State.ESPERANDO_COMIDA: "cubiertos",
 	CustomerGroup.State.ESPERANDO_CUENTA: "€",
 }
 const STREET_COLOR := Color("9aa3a8")
@@ -122,16 +123,36 @@ func _sync_customer(bot: Bot, g: CustomerGroup, member_index: int) -> void:
 		bot.eyes = Bot.Eyes.NORMAL
 	else:
 		bot.eyes = Bot.Eyes.FELIZ
+	if member_index == g.child_member and bot.scale.x > 0.8:
+		bot.make_child()
+	# Levantan la mano para llamar al camarero si llevan rato esperando.
+	bot.waving = member_index == 0 and seated and g.hand_raised()
+	bot.set_thought(_thought_for(g, member_index), _mood_color(mood))
+
+
+## Qué piensa cada miembro del grupo (casi siempre solo uno lo muestra, para no saturar).
+func _thought_for(g: CustomerGroup, member_index: int) -> String:
+	if sim.minutes < g.shout_until:
+		return "¡Oiga!" if member_index == 0 else ""
+	if g.is_critic and g.state == CustomerGroup.State.COMIENDO:
+		return "lapiz"
+	if g.birthday and member_index == 1 and g.state in [CustomerGroup.State.ESPERANDO_COMIDA, CustomerGroup.State.COMIENDO]:
+		return "tarta"
 	if member_index != 0:
-		return
-	if g.state == CustomerGroup.State.SALIENDO and g.left_angry:
-		bot.set_bubble("!", Color("d9433b"))
-	elif BUBBLES.has(g.state):
-		var color := Color("d9433b").lerp(Color("e0b43b"), mood * 2.0) if mood < 0.5 \
-				else Color("e0b43b").lerp(Color("4caf50"), (mood - 0.5) * 2.0)
-		bot.set_bubble(BUBBLES[g.state], color)
-	else:
-		bot.set_bubble("")
+		return ""
+	if g.state == CustomerGroup.State.SALIENDO:
+		if g.left_angry:
+			return "!"
+		return "corazon" if g.satisfaction >= 80.0 else ""
+	if g.state == CustomerGroup.State.COMIENDO:
+		return "corazon" if g.mood() > 0.85 and g.state_time < 6.0 else ""
+	return THOUGHTS.get(g.state, "")
+
+
+static func _mood_color(mood: float) -> Color:
+	if mood < 0.5:
+		return Color("d9433b").lerp(Color("e0b43b"), mood * 2.0)
+	return Color("e0b43b").lerp(Color("4caf50"), (mood - 0.5) * 2.0)
 
 
 func _sync_staff(bot: Bot, s: StaffMember) -> void:

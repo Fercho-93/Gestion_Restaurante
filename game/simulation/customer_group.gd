@@ -70,6 +70,21 @@ var patience_bonus := 0.0
 var talked := {}
 ## Euros que se les ha invitado (se descuentan de la cuenta).
 var comp_value := 0.0
+## Cliente habitual (nombre) o "" si no lo es.
+var regular_name := ""
+## Crítico gastronómico de incógnito (su reseña pesa mucho en la reputación).
+var is_critic := false
+## Celebran un cumpleaños.
+var birthday := false
+## Miembro que es un niño (-1 si no hay): se aburre y se levanta a corretear.
+var child_member := -1
+## El niño: "" (en su sitio), "jugando" o "volviendo".
+var child_state := ""
+var child_timer := 0.0
+## Ya se han quejado en voz alta (solo una vez).
+var complained := false
+## Hasta qué minuto se les oye quejarse ("¡Oiga!").
+var shout_until := -1.0
 
 
 func set_state(new_state: State) -> void:
@@ -98,6 +113,12 @@ func mood() -> float:
 	if PATIENCE.has(state):
 		current = maxf(0.0, state_time - patience_limit()) / patience_limit()
 	return clampf(1.0 - 0.5 * (wait_penalty + current) + mood_bonus, 0.0, 1.0)
+
+
+## Levantan la mano para llamar al camarero si llevan un rato esperando a pedir o pagar.
+func hand_raised() -> bool:
+	return (state == State.ESPERANDO_PEDIR or state == State.ESPERANDO_CUENTA) \
+			and state_time > 0.5 * patience_limit() and waiter == null
 
 
 func is_food_ready() -> bool:

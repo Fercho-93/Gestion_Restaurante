@@ -11,6 +11,7 @@ extends CanvasLayer
 @onready var rotate_hint: Control = %RotateHint
 @onready var computer: ComputerScreen = %Computer
 @onready var dialogue: DialogueBox = %Dialogue
+@onready var toasts: Toasts = %Toasts
 @onready var top_bar: Control = $TopBar
 @onready var bottom_bar: Control = $BottomBar
 @onready var speed_buttons := {
@@ -29,6 +30,7 @@ func _ready() -> void:
 	day_report.closed.connect(func(): Game.clock.set_speed(1))
 	Game.sim.manager_started_using.connect(_on_manager_started_using)
 	Game.sim.manager_started_talking.connect(_on_manager_started_talking)
+	Game.sim.announcement.connect(toasts.add)
 	computer.closed.connect(_on_panel_closed)
 	dialogue.closed.connect(_on_dialogue_closed)
 	_on_speed_changed(Game.clock.speed)
@@ -74,6 +76,8 @@ func blocks_point(screen_pos: Vector2) -> bool:
 	if computer.visible or day_report.is_visible_in_tree() or rotate_hint.visible:
 		return true
 	if dialogue.visible and dialogue.get_global_rect().has_point(screen_pos):
+		return true
+	if toasts.covers(screen_pos):
 		return true
 	return top_bar.get_global_rect().has_point(screen_pos) or bottom_bar.get_global_rect().has_point(screen_pos)
 

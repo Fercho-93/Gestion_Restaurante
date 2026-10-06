@@ -32,6 +32,10 @@ static func speaker_name(target: Dictionary) -> String:
 
 
 static func customer_name(g: CustomerGroup, member: int) -> String:
+	if member == 0 and g.regular_name != "":
+		return g.regular_name
+	if member == g.child_member:
+		return ["Lucas", "Martina", "Hugo", "Vera"][g.id % 4] + " (niño)"
 	return CUSTOMER_NAMES[(g.id * 5 + member * 3) % CUSTOMER_NAMES.size()]
 
 
@@ -71,6 +75,8 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 	if waiting and g.mood() < 0.9 and not g.talked.has("disculpa"):
 		list.append({ "id": "disculpa", "texto": "Disculpen la espera" })
 	var at_table := g.state in [CustomerGroup.State.ESPERANDO_COMIDA, CustomerGroup.State.COMIENDO, CustomerGroup.State.ESPERANDO_CUENTA]
+	if at_table and g.birthday and not g.talked.has("tarta"):
+		list.append({ "id": "tarta", "texto": "¡Felicidades! La tarta invita la casa (%.0f €)" % RestaurantSim.CAKE_COST })
 	if at_table and not g.talked.has("invitar"):
 		list.append({ "id": "invitar", "texto": "Les invito al postre (%.2f €)" % TREAT_COST })
 	if g.state == CustomerGroup.State.SALIENDO and g.left_angry and not g.talked.has("compensar"):
@@ -100,6 +106,12 @@ static func opening(target: Dictionary, sim: RestaurantSim) -> String:
 		return ("¿Sí, jefe? Estoy libre." if e.task.is_empty() else "¡Dígame, jefe! Estaba %s." % e.describe_task().to_lower()) + mood_hint
 	var g: CustomerGroup = e
 	var mood := g.mood()
+	if g.regular_name != "" and g.state != CustomerGroup.State.SALIENDO and not g.talked.has("saludo"):
+		return "¡Hombre, jefe! Aquí estamos otra vez, como siempre."
+	if g.is_critic and g.state in [CustomerGroup.State.ESPERANDO_COMIDA, CustomerGroup.State.COMIENDO]:
+		return "Mmm… Nada, nada. Solo tomaba unas notas."
+	if g.birthday and g.state in [CustomerGroup.State.ESPERANDO_PEDIR, CustomerGroup.State.ESPERANDO_COMIDA, CustomerGroup.State.COMIENDO]:
+		return "¡Hoy celebramos un cumpleaños!"
 	match g.state:
 		CustomerGroup.State.LLEGANDO, CustomerGroup.State.EN_COLA:
 			return "Hola. ¿Queda mucho para que haya mesa?" if mood > 0.5 else "¡Llevamos un buen rato esperando mesa!"
@@ -155,7 +167,11 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 	match option_id:
 		"que_tal":
 			if first_time:
-				g.mood_bonus += CHAT_MOOD
+				# A un habitual le alegra mucho que el jefe le salude.
+				g.mood_bonus += CHAT_MOOD * (3.0 if g.regular_name != "" else 1.0)
+				if g.regular_name != "":
+					g.talked["saludo"] = true
+					return "¡Siempre da gusto venir aquí, jefe!"
 			if g.state == CustomerGroup.State.COMIENDO or g.state == CustomerGroup.State.ESPERANDO_CUENTA:
 				return _food_opinion(g, sim, target["member"])
 			var mood := g.mood()
@@ -172,6 +188,11 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 			sim.finances.spend("invitaciones", TREAT_COST)
 			sim.day_stats["invitaciones"] += TREAT_COST
 			return "¡Vaya, qué detalle! Muchas gracias."
+		"tarta":
+			g.mood_bonus += 0.4
+			sim.finances.spend("invitaciones", RestaurantSim.CAKE_COST)
+			sim.day_stats["invitaciones"] += RestaurantSim.CAKE_COST
+			return "¡Qué ilusión! ¡Muchísimas gracias!"
 		"compensar":
 			# Un cliente que se iba enfadado no se va tan mal: la reputación sufre menos.
 			sim.reputation = minf(1.0, sim.reputation + 0.01)

@@ -312,7 +312,15 @@ Hito 1 en curso:
 - ✅ El gestor trabaja: tareas sueltas desde la conversación (acompañar, tomar nota,
   servir, cobrar), tocar una mesa sucia o una mancha para limpiarla, o tocarse a sí
   mismo para ponerse a atender mesas o a limpiar de continuo.
-- Siguiente: vida en la sala (bocadillos, reacciones, eventos) y cansancio del gestor.
+- ✅ Vida en la sala: bocadillos con iconos (reloj, ?, cubiertos, €, corazón, !, tarta,
+  lápiz) teñidos según el ánimo; clientes que levantan la mano si llevan rato esperando;
+  quejas en voz alta que molestan a las mesas cercanas; niños que se levantan a
+  corretear mientras esperan la comida.
+- ✅ Eventos con aviso en pantalla (tocarlo lleva la cámara allí): platos que se caen
+  (más con prisa o desánimo; se repite el plato y mancha el suelo), clientes habituales
+  (les alegra que el jefe les salude), críticos de incógnito (su reseña pesa mucho) y
+  cumpleaños (se puede invitar a la tarta).
+- Siguiente: cansancio del gestor y máquina de café.
 
 ## 11. Pendiente de decidir
 

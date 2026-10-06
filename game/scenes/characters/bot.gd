@@ -37,7 +37,11 @@ var _foot_r: MeshInstance3D
 var _eyes_mat: StandardMaterial3D
 var _hand_plate: Node3D
 var _table_plate: Node3D
-var _bubble: Label3D
+var _thought: Node3D
+var _thought_bg: Sprite3D
+var _thought_icon: Sprite3D
+var _thought_text: Label3D
+var _thought_shown := ""
 var _walk_t := 0.0
 var _idle_t := 0.0
 var _blink_left := 0.0
@@ -96,22 +100,62 @@ func setup(bot_role: Role, seed_value: int) -> void:
 			scale = Vector3.ONE * (1.05 + float(seed_value % 4) * 0.04)
 			_add_accessory(seed_value / ACCENTS.size() % 4, accent)
 
-	_bubble = Label3D.new()
-	_bubble.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_bubble.no_depth_test = true
-	_bubble.font_size = 72
-	_bubble.outline_size = 24
-	_bubble.pixel_size = 0.0035
-	_bubble.position = Vector3(0, 1.02, 0)
-	_bubble.visible = false
-	add_child(_bubble)
+	_thought = Node3D.new()
+	_thought.position = Vector3(0, 1.05, 0)
+	_thought.visible = false
+	add_child(_thought)
+	_thought_bg = Sprite3D.new()
+	_thought_bg.texture = r["thought_bubble"]
+	_thought_bg.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_thought_bg.no_depth_test = true
+	_thought_bg.render_priority = 1
+	_thought_bg.pixel_size = 0.0042
+	_thought.add_child(_thought_bg)
+	_thought_icon = Sprite3D.new()
+	_thought_icon.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_thought_icon.no_depth_test = true
+	_thought_icon.render_priority = 2
+	_thought_icon.pixel_size = 0.0042
+	_thought_icon.offset = Vector2(0, 8)
+	_thought.add_child(_thought_icon)
+	_thought_text = Label3D.new()
+	_thought_text.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_thought_text.no_depth_test = true
+	_thought_text.render_priority = 2
+	_thought_text.font_size = 64
+	_thought_text.outline_size = 0
+	_thought_text.pixel_size = 0.0042
+	_thought_text.offset = Vector2(0, 8)
+	_thought.add_child(_thought_text)
 	_update_eyes(0.0)
 
 
-func set_bubble(text: String, color: Color = Color.WHITE) -> void:
-	_bubble.visible = text != ""
-	_bubble.text = text
-	_bubble.modulate = color
+## Bocadillo de pensamiento. `icon`: "" (ninguno), un icono dibujado ("reloj",
+## "cubiertos", "corazon", "tarta", "lapiz") o un texto corto ("?", "!", "€", "¡Oiga!").
+## `tint`: el color del bocadillo según el ánimo.
+func set_thought(icon: String, tint: Color = Color.WHITE) -> void:
+	_thought.visible = icon != ""
+	_thought_bg.modulate = Color.WHITE.lerp(tint, 0.45)
+	if icon == _thought_shown:
+		return
+	_thought_shown = icon
+	var icons: Dictionary = resources()["thought_icons"]
+	_thought_icon.visible = icons.has(icon)
+	_thought_text.visible = not icons.has(icon) and icon != ""
+	if icons.has(icon):
+		_thought_icon.texture = icons[icon]
+	else:
+		_thought_text.text = icon
+		_thought_text.modulate = Color("c62828") if icon.begins_with("!") or icon.begins_with("¡") else Color("263238")
+		_thought_text.font_size = 40 if icon.length() > 2 else 64
+		_thought_bg.scale = Vector3(1.6, 1.0, 1.0) if icon.length() > 2 else Vector3.ONE
+	if icons.has(icon):
+		_thought_bg.scale = Vector3.ONE
+
+
+## Los niños son más pequeños.
+func make_child() -> void:
+	scale = Vector3.ONE * 0.72
 
 
 ## Gira poco a poco para mirar en la dirección indicada (en el plano del suelo).
@@ -268,12 +312,93 @@ static func resources() -> Dictionary:
 	var textures := {}
 	for kind in Eyes.values():
 		textures[kind] = _eye_texture(kind)
+	var thought_icons := {}
+	for icon in ["reloj", "cubiertos", "corazon", "tarta", "lapiz"]:
+		thought_icons[icon] = _icon_texture(icon)
 	_res = {
 		"capsule": capsule, "sphere": sphere, "cylinder": cylinder, "torus": torus,
 		"box": BoxMesh.new(), "eyes_quad": quad, "visor": visor,
 		"eyes_material": eyes_material, "eye_textures": textures, "materials": {},
+		"thought_bubble": _bubble_texture(), "thought_icons": thought_icons,
 	}
 	return _res
+
+
+## Bocadillo de pensamiento: nube blanca con borde y dos burbujitas debajo.
+static func _bubble_texture() -> ImageTexture:
+	var img := Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var blobs := [[Vector2(64, 54), 46.0], [Vector2(40, 104), 9.0], [Vector2(28, 120), 5.0]]
+	for x in 128:
+		for y in 128:
+			var p := Vector2(x, y)
+			for b in blobs:
+				var d: float = p.distance_to(b[0]) - b[1]
+				if d <= 0.0:
+					var border := d > -4.0
+					img.set_pixel(x, y, Color(0.55, 0.58, 0.62) if border else Color.WHITE)
+					break
+	return ImageTexture.create_from_image(img)
+
+
+## Iconos de los bocadillos, dibujados con formas simples (la fuente web no trae emojis).
+static func _icon_texture(kind: String) -> ImageTexture:
+	var img := Image.create(96, 96, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for x in 96:
+		for y in 96:
+			var c := _icon_pixel(kind, Vector2(x - 48, y - 48))
+			if c.a > 0.0:
+				img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
+
+
+static func _icon_pixel(kind: String, p: Vector2) -> Color:
+	var dark := Color("37474f")
+	match kind:
+		"reloj":
+			var r := p.length()
+			if r <= 30.0 and r >= 24.0:
+				return dark
+			if _near_segment(p, Vector2.ZERO, Vector2(0, -18), 3.5) or _near_segment(p, Vector2.ZERO, Vector2(13, 0), 3.5):
+				return dark
+			if r < 24.0:
+				return Color("fff8e1")
+		"cubiertos":
+			# Tenedor (izquierda) y cuchillo (derecha).
+			if _near_segment(p, Vector2(-12, -6), Vector2(-12, 30), 3.5):
+				return dark
+			for tine in [-19.0, -12.0, -5.0]:
+				if _near_segment(p, Vector2(tine, -30), Vector2(tine, -8), 2.5):
+					return dark
+			if _near_segment(p, Vector2(-19, -8), Vector2(-5, -8), 3.0):
+				return dark
+			if _near_segment(p, Vector2(13, -30), Vector2(13, 30), 3.5) or (p.x > 13 and p.x < 20 and p.y > -30 and p.y < 2):
+				return dark
+		"corazon":
+			var q := Vector2(p.x, -p.y - 4.0) / 26.0
+			var f := pow(q.x * q.x + q.y * q.y - 1.0, 3.0) - q.x * q.x * pow(q.y, 3.0)
+			if f <= 0.0:
+				return Color("e53935")
+		"tarta":
+			if p.y > 0 and p.y < 26 and absf(p.x) < 28:
+				return Color("f48fb1") if p.y > 8 else Color("fff3e0")
+			if _near_segment(p, Vector2(0, -2), Vector2(0, -20), 3.0):
+				return Color("fdd835")
+			if p.distance_to(Vector2(0, -26)) < 5.0:
+				return Color("ff7043")
+		"lapiz":
+			if _near_segment(p, Vector2(-22, 22), Vector2(16, -16), 7.0):
+				return Color("fbc02d") if p.distance_to(Vector2(-22, 22)) > 10.0 else Color("5d4037")
+			if _near_segment(p, Vector2(16, -16), Vector2(24, -24), 7.0):
+				return Color("e57373")
+	return Color(0, 0, 0, 0)
+
+
+static func _near_segment(p: Vector2, a: Vector2, b: Vector2, width: float) -> bool:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return p.distance_to(a + ab * t) <= width
 
 
 ## Dibuja los dos ojos de una expresión en una textura (blanco sobre transparente).

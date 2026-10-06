@@ -26,6 +26,7 @@ func _initialize() -> void:
 	test_manager_talks()
 	test_talk_effects()
 	test_manager_works_and_cleaning()
+	test_room_life()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -359,7 +360,8 @@ func test_nobody_walks_through_anything() -> void:
 	check(overlaps == 0, "nadie comparte casilla con otra persona (%d solapes)" % overlaps)
 	check(on_furniture == 0, "nadie pisa mesas, barra ni muebles (%d veces)" % on_furniture)
 	var served: int = report.get("clientes_servidos", 0)
-	check(served >= 50, "el servicio sigue funcionando con tráfico: %d clientes atendidos" % served)
+	var lost: int = report.get("grupos_perdidos", 0)
+	check(served >= 40 and lost <= 12, "el servicio sigue funcionando con tráfico: %d atendidos, %d grupos perdidos" % [served, lost])
 	check(sim.forced_passes <= 10, "los cruces forzados son raros: %d" % sim.forced_passes)
 	print("Día con tráfico: %d clientes atendidos, %d perdidos, %d pasos forzados" % [served, report.get("grupos_perdidos", 0), sim.forced_passes])
 	# Nadie se queda atascado: al final del día no queda nadie esperando para siempre.
@@ -554,3 +556,102 @@ func test_manager_works_and_cleaning() -> void:
 			break
 	check(sim.stains.is_empty(), "limpiando, el gestor friega todas las manchas")
 	check(sim.manager.describe() != "", "el gestor describe lo que hace")
+
+
+func _seated_group(sim: RestaurantSim, id: int, size: int, table_index: int) -> CustomerGroup:
+	var g := CustomerGroup.new()
+	g.id = id
+	g.size = size
+	var table: RestaurantLayout.Table = sim.layout.tables[table_index]
+	for i in size:
+		var m := Mover.new(table.seats[i])
+		g.members.append(m)
+	g.table = table
+	table.group = g
+	sim.groups.append(g)
+	return g
+
+
+func test_room_life() -> void:
+	var sim := RestaurantSim.new(load_data(), 13 * 60, 5)
+	var notices: Array[String] = []
+	sim.announcement.connect(func(text: String, _cell: Vector2i): notices.append(text))
+	# Plato que se cae: vuelve a la cocina, se mancha el suelo y se avisa.
+	var g := _seated_group(sim, 701, 2, 0)
+	g.set_state(CustomerGroup.State.ESPERANDO_COMIDA)
+	g.dishes = ["flan", "flan"]
+	g.dishes_ready = 2
+	g.food_quality_sum = 160.0
+	var w := sim.waiters()[0]
+	w.rushed_until = sim.minutes + 999.0
+	w.now = sim.minutes
+	var drops := 0
+	for i in 400:
+		if sim._drops_plate(w):
+			drops += 1
+	check(drops > 10 and drops < 80, "con prisa se caen algunos platos (%d de 400)" % drops)
+	sim.rng.seed = 1
+	var dropped := false
+	for attempt in 200:
+		sim.start_task(w, { "tipo": "servir", "grupo": g })
+		w.task["fase"] = "atender"
+		w.task["tiempo"] = 0.0
+		var queue_before := sim.kitchen_queue.size()
+		sim._progress_waiter_task(w, 0.1)
+		if g.state == CustomerGroup.State.ESPERANDO_COMIDA:
+			dropped = true
+			check(sim.kitchen_queue.size() == queue_before + 1 and g.dishes_ready == 1, "el plato caído se vuelve a cocinar")
+			check(not sim.stains.is_empty(), "el plato caído mancha el suelo")
+			check(notices.any(func(t): return t.contains("caído")), "se avisa del plato caído")
+			break
+		g.set_state(CustomerGroup.State.ESPERANDO_COMIDA)
+		g.dishes_ready = 2
+	check(dropped, "en algún momento se cae un plato")
+	# Queja en voz alta: molesta a la mesa de al lado.
+	var angry := _seated_group(sim, 702, 2, 1)
+	angry.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
+	angry.state_time = 15.0
+	var neighbour := _seated_group(sim, 703, 2, 3)
+	neighbour.set_state(CustomerGroup.State.COMIENDO)
+	var before := neighbour.mood()
+	sim._maybe_complain(angry)
+	check(angry.complained and sim.minutes < angry.shout_until, "un cliente muy enfadado se queja en voz alta")
+	check(neighbour.mood() < before, "la queja molesta a la mesa de al lado")
+	check(angry.hand_raised(), "quien lleva rato esperando levanta la mano")
+	# Crítico: su reseña pesa mucho más que la de un cliente normal.
+	var critic := _seated_group(sim, 704, 1, 4)
+	critic.is_critic = true
+	critic.set_state(CustomerGroup.State.ESPERANDO_CUENTA)
+	critic.dishes = ["flan"]
+	critic.dishes_ready = 1
+	critic.food_quality_sum = 5.0
+	critic.bill = 9.0
+	critic.fair_bill = 4.5
+	critic.service_scores = [5.0]
+	critic.wait_penalty = 2.0
+	var normal := _seated_group(sim, 706, 1, 5)
+	for k in ["dishes", "dishes_ready", "food_quality_sum", "bill", "fair_bill", "service_scores", "wait_penalty"]:
+		normal.set(k, critic.get(k))
+	normal.set_state(CustomerGroup.State.ESPERANDO_CUENTA)
+	var rep := sim.reputation
+	sim._charge(normal)
+	var normal_drop := rep - sim.reputation
+	rep = sim.reputation
+	sim._charge(critic)
+	check(rep - sim.reputation > normal_drop * 5.0, "un crítico descontento hunde la reputación mucho más que un cliente normal")
+	check(notices.any(func(t): return t.contains("crítico")), "se descubre al crítico al irse")
+	# Niño que se aburre esperando la comida: se levanta y vuelve a su sitio.
+	var family := _seated_group(sim, 705, 3, 3 if neighbour.table != sim.layout.tables[3] else 0)
+	family.child_member = 2
+	family.set_state(CustomerGroup.State.ESPERANDO_COMIDA)
+	var played := false
+	for i in 3000:
+		sim._update_child(family, 0.1)
+		for m in family.members:
+			sim._walk(m, "g705", 0.1)
+		if family.child_state == "jugando":
+			played = true
+		if played and family.child_state == "":
+			break
+	check(played, "el niño se levanta a jugar")
+	check(family.child_state == "" and family.members[2].last_cell == family.table.seats[2], "y vuelve a su sitio")
