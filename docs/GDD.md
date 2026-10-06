@@ -14,18 +14,47 @@
 | Vista | Isométrica en 3D (cámara ortográfica) |
 | Orientación | Horizontal (landscape) |
 | Tiempo | Tiempo real continuo estilo *Los Sims*: pausa, x1, x2, x4 |
-| Gestor (protagonista) | Personaje propio, animado (pendiente de diseño) |
-| Monetización | Por decidir más adelante |
+| Tipo de partida | Continua y abierta, estilo *Los Sims*: sin misiones ni objetivos. El restaurante evoluciona de forma orgánica (crece, mejora o empeora) según tus decisiones |
+| Público | Aficionado a la gestión profunda (*Sims*, *tycoons*, simuladores), pero **intuitivo**: fácil de entender, con todo el detalle y el realismo disponibles para quien quiera profundizar |
+| Gestor (protagonista) | Tu avatar, al que controlas (personaje de `docs/arte/personaje_referencia.png`). Se mueve por el local y hace las gestiones en persona; puede delegar contratando personal |
+| Monetización | Se decide más adelante, cuando la estructura del juego esté asentada |
 | Forma de trabajo | Desarrollo iterativo, *vibe coding*, paso a paso |
 
 ---
 
 ## 2. Concepto
 
-El jugador es el **gestor** de un restaurante. Empieza con poco dinero, elige dónde
-abrir, monta el local, contrata personal, diseña la carta y lo saca adelante día a
-día. La capa visual es **amable, colorida y divertida**; la capa de gestión es
-**profunda y realista**.
+El jugador es el **gestor** de un restaurante: un personaje que controla y que vive en
+el local. Empieza con poco dinero, monta el local, contrata personal, diseña la carta
+y lo saca adelante día a día, sin fin y sin misiones: como en *Los Sims*, la partida
+es una vida continua del restaurante, que puede crecer (más grande, más calidad, más
+fama) o venirse abajo. La capa visual es **amable, colorida y divertida**; la capa de
+gestión es **profunda y realista**, pero siempre **intuitiva**.
+
+### El gestor: tu avatar
+
+- Lo controlas directamente: tocas el suelo y va andando; tocas un objeto y lo usa.
+- **Las gestiones se hacen en persona, en su sitio** (la "física" del local importa):
+  - **Despacho / ordenador**: abre el módulo de gestión (carta y precios, personal y
+    contratación, pedidos a proveedores, finanzas, informes).
+  - **Comedor**: puede saludar, acomodar clientes o echar una mano en momentos de
+    agobio; su presencia mejora el ambiente.
+  - **Cocina y almacén**: revisar el stock, ver cómo va la cocina.
+- Mientras está en el despacho no está en la sala: **su tiempo es un recurso**.
+- Según crece el negocio puede **delegar**: contratar un encargado de compras, un
+  jefe de sala o un jefe de cocina que hagan solos parte de las gestiones (con su
+  habilidad y sus errores).
+- Las órdenes se pueden dar también en pausa (se ponen en cola, como en *Los Sims*).
+
+### Evolución orgánica (sin objetivos)
+
+No hay misiones: el progreso sale de la propia simulación.
+- **Crecer**: más reputación → más clientes → más caja → ampliar el local, mejores
+  muebles y cocina, más personal, carta más ambiciosa, segundo local.
+- **Empeorar**: mala comida, esperas, suciedad o malos precios → malas reseñas → menos
+  clientes → problemas de caja → deudas.
+- Hitos que surgen solos (no se exigen): primera reseña de 5, primer mes en positivo,
+  visita de un crítico, aniversario del restaurante… sirven como recuerdos del historial.
 
 ### Pilares
 
@@ -151,9 +180,11 @@ entrega, empleado enfermo, intoxicación, visita de un crítico, ola de calor,
 subida de precios, competidor que abre al lado, fiesta local, obras en la calle.
 Cada evento: condiciones de aparición, probabilidad, efecto y opciones de respuesta.
 
-### 5.11 Progresión
-- Objetivos/misiones, logros, desbloqueo de barrios, recetas y equipamiento.
-- Expansión a varios locales (fase avanzada).
+### 5.11 Progresión (orgánica)
+- Sin misiones ni objetivos obligatorios: se progresa porque el negocio va bien.
+- La reputación y la caja abren puertas: proveedores mejores, críticos, ampliar el
+  local, mudarse a un barrio mejor, segundo local (fase avanzada).
+- Historial del restaurante con hitos espontáneos (primer 5/5, primer mes en positivo…).
 
 ---
 
@@ -211,41 +242,40 @@ Reglas:
 
 ## 9. Hoja de ruta
 
-| Fase | Contenido | Hito |
+Principios: primero **lo jugable con gráficos provisionales**; pronto un **corte
+vertical** para fijar el aspecto final en un móvil real; el arte en cantidad, después.
+Cada hito termina en algo que se prueba en el móvil.
+
+| Hito | Contenido | Pregunta que responde |
 |---|---|---|
-| 0 · Preproducción | GDD, proyecto base, reloj, mundo isométrico de prueba | ✅ hecho |
-| 1 · Prototipo (MVP) | Un local fijo, clientes que entran/piden/comen/pagan, 2-3 empleados, carta de 5-10 platos, inventario básico, informe diario | 🔨 en curso: ciclo de servicio jugable |
-| 2 · Núcleo de gestión | Contratación y atributos, proveedores y caducidad, escandallo, finanzas, satisfacción y reputación, guardado | Partida de varios días con sentido |
-| 3 · Construcción | Editor isométrico de distribución y decoración, ubicación y locales | El jugador monta su propio local |
-| 4 · Profundidad | Eventos, tipos de cocina, temporadas, progresión, varios locales | Partida larga |
-| 5 · Lanzamiento | Tutorial, equilibrado, sonido, optimización, beta y publicación | En tiendas |
+| 0 · Base | Motor, web, pruebas, simulación del servicio, vista 3D, cámara, personajes provisionales | ✅ hecho |
+| 1 · Primer juego de verdad | **Gestor controlable** (andar, usar objetos, cola de órdenes); **despacho con ordenador** que abre la gestión: carta y precios (con escandallo), personal (candidatos, contratar, despedir, sueldos), pedidos y almacén; **guardar/cargar**; informes que explican resultados; consecuencias reales (caja negativa, deudas) | ¿Es divertido decidir? |
+| 2 · Corte vertical | Gestor y camarero con modelo 3D definitivo, un local con aspecto final, estilo final de la interfaz, sonido básico, primera APK de Android | ¿Se ve y funciona bien en un móvil real? ¿Cuánto cuesta producir arte? |
+| 3 · Construcción | Editor del local: mover/comprar mesas, cocina y decoración; ambiente; ampliar el local | ¿Es divertido montar y mejorar el local? |
+| 4 · Profundidad | Proveedores y caducidad, perfiles de cliente, moral/cansancio/turnos del personal, **delegar** (encargados), eventos, finanzas mensuales y préstamos | ¿Aguanta semanas de juego? |
+| 5 · Evolución larga | Ciudad y barrios, mudanzas, alquilar/comprar, segundo local, historial y estaciones | ¿Aguanta meses de juego? |
+| 6 · Contenido y arte | Variedad de personajes (masculino/femenino, ropa, puestos), recetas, tipos de cocina, muebles | — |
+| 7 · Lanzamiento | Tutorial, equilibrado, monetización, beta con jugadores, tiendas | — |
 
 ---
 
-## 10. Estado de la Fase 1
+## 10. Estado actual
 
-Hecho:
+Hecho (hito 0):
 - Clientes en grupos (1-4) que llegan por la calle según la hora (picos de comida y cena),
   hacen cola, se sientan, piden, esperan, comen, piden la cuenta, pagan y se van.
-- Paciencia por fase: si esperan demasiado se enfadan y, al doble, se marchan
-  (sin mesa, sin que les tomen nota, comida lenta o incluso sin pagar).
-- Camareros con prioridades (servir > cobrar > tomar nota), que caminan por el local
-  esquivando mesas (A*). Velocidad y trato influyen.
+- Paciencia por fase: si esperan demasiado se enfadan y, al doble, se marchan.
+- Camareros con prioridades (servir > cobrar > tomar nota) que caminan esquivando mesas (A*).
 - Cocineros que preparan varios platos a la vez; su habilidad marca la calidad.
 - Inventario que se gasta con cada plato y pedido automático diario a las 11:00.
-- Elección de plato según la relación precio/valor de la carta.
-- Satisfacción según la fórmula del apartado 5.7, propinas (para el personal) y reputación,
-  que hace venir más o menos clientes.
-- Informe de cierre del día con caja, gastos, beneficio y platos más vendidos.
-- Pulsar sobre una persona muestra su estado; sobre el suelo, la zona.
+- Satisfacción (apartado 5.7), propinas, reputación que atrae más o menos clientes.
+- Informe de cierre del día. Vista 3D isométrica con personajes al estilo del gestor.
 
-Siguiente:
-- Pantallas de gestión: carta y precios, personal, almacén.
-- Personajes definitivos y animaciones.
+Siguiente: hito 1, empezando por el gestor controlable y el despacho.
 
 ## 11. Pendiente de decidir
 
-- Diseño del personaje gestor.
-- Monetización.
-- Nombre del juego.
+- Qué pasa si te arruinas (¿cierre y empezar de nuevo, o préstamos/rescate hasta un límite?).
+- Monetización (más adelante).
+- Nombre del juego y del personaje gestor.
 - Moneda y país de ambientación (¿euros/España por defecto?).
