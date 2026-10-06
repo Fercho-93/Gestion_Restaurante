@@ -11,4 +11,4 @@ builds/
 *.ipa
 
 # Exportación web local
-build/
+/build/
