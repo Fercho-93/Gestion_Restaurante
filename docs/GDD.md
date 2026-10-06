@@ -320,7 +320,11 @@ Hito 1 en curso:
   (más con prisa o desánimo; se repite el plato y mancha el suelo), clientes habituales
   (les alegra que el jefe les salude), críticos de incógnito (su reseña pesa mucho) y
   cumpleaños (se puede invitar a la tarta).
-- Siguiente: cansancio del gestor y máquina de café.
+- ✅ Cansancio del gestor: energía que baja con el día (más andando y mucho más
+  trabajando); por debajo de la mitad va más lento y trata peor, y agotado no puede
+  trabajar. La cafetera de la barra la recupera y la noche la repone del todo. Se le
+  nota en la cara (ojos entornados, "Zzz").
+- Siguiente: Carta y precios (primer módulo de gestión del ordenador).
 
 ## 11. Pendiente de decidir
 

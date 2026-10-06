@@ -44,6 +44,8 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 	var e = target["entity"]
 	var list := []
 	if e is Manager:
+		if e.energy < 90.0:
+			list.append({ "id": "cafe", "texto": "Ir a tomar un café", "trabajo": true })
 		if e.covering != "sala":
 			list.append({ "id": "cubrir_sala", "texto": "Ponerme a atender mesas", "trabajo": true })
 		if e.covering != "limpieza":
@@ -93,12 +95,13 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 static func opening(target: Dictionary, sim: RestaurantSim) -> String:
 	var e = target["entity"]
 	if e is Manager:
+		var tired := "" if e.energy >= 70.0 else " (Estoy %s.)" % e.energy_word()
 		match e.covering:
 			"sala":
-				return "Estoy atendiendo mesas. ¿Sigo o hago otra cosa?"
+				return "Estoy atendiendo mesas. ¿Sigo o hago otra cosa?" + tired
 			"limpieza":
-				return "Estoy limpiando el local. ¿Sigo o hago otra cosa?"
-		return "¿Qué hago ahora?"
+				return "Estoy limpiando el local. ¿Sigo o hago otra cosa?" + tired
+		return "¿Qué hago ahora?" + tired
 	if e is StaffMember:
 		var mood_hint := "" if e.moral >= 40.0 else " (Se le ve cansado.)"
 		if e.puesto == StaffMember.ROLE_COOK:
@@ -139,6 +142,9 @@ static func choose(target: Dictionary, option_id: String, sim: RestaurantSim) ->
 	var e = target["entity"]
 	if e is Manager:
 		match option_id:
+			"cafe":
+				sim.order_manager_use("cafetera")
+				return "Un cafecito y como nuevo."
 			"cubrir_sala":
 				sim.set_manager_covering("sala")
 				return "Manos a la obra: a atender mesas."

@@ -27,6 +27,10 @@ const MAX_STAINS := 12
 const REGULAR_NAMES := ["Don Ramón", "Doña Encarna", "Pepe el del quiosco", "Sofía", "Tomás", "Luisa"]
 ## Lo que cuesta la tarta de cumpleaños que invita la casa.
 const CAKE_COST := 6.0
+## Energía del gestor: lo que gasta por minuto según lo que hace, y lo que da un café.
+const ENERGY_DRAIN := { "base": 0.05, "andando": 0.05, "trabajando": 0.09 }
+const COFFEE_MINUTES := 2.0
+const COFFEE_ENERGY := 35.0
 ## Tráfico: si alguien no puede avanzar, cada tanto busca otro camino; si sigue
 ## atascado, se aparta a un lado; y como último recurso pasa igualmente.
 const REPLAN_EVERY := 0.5
@@ -206,6 +210,9 @@ func stop_manager() -> void:
 
 ## El gestor hace él mismo una tarea de sala: {tipo, grupo|mesa|celda}.
 func order_manager_task(task: Dictionary) -> void:
+	if manager.exhausted():
+		announcement.emit("Estás demasiado cansado para trabajar: tómate un café", manager.mover.last_cell)
+		return
 	_end_talk()
 	_stop_manager_work()
 	manager.stop()
@@ -215,6 +222,9 @@ func order_manager_task(task: Dictionary) -> void:
 
 ## Trabajo continuo del gestor: "sala" (atender mesas), "limpieza" o "" (dejarlo).
 func set_manager_covering(mode: String) -> void:
+	if mode != "" and manager.exhausted():
+		announcement.emit("Estás demasiado cansado para trabajar: tómate un café", manager.mover.last_cell)
+		return
 	_end_talk()
 	_stop_manager_work()
 	manager.stop()
@@ -360,7 +370,32 @@ func _unblock(m: Mover, key: String) -> void:
 				return
 
 
+## Cansancio del gestor: se gasta energía, el café la recupera y agotado no puede trabajar.
+func _update_manager_energy(dt: float) -> void:
+	var m := manager
+	var drain: float = ENERGY_DRAIN["base"]
+	if m.state == Manager.State.TRABAJANDO:
+		drain += ENERGY_DRAIN["trabajando"]
+	elif m.mover.is_moving():
+		drain += ENERGY_DRAIN["andando"]
+	if m.state == Manager.State.USANDO and m.using == "cafetera":
+		drain = 0.0
+		m.coffee_left -= dt
+		if m.coffee_left <= 0.0:
+			m.energy = minf(100.0, m.energy + COFFEE_ENERGY)
+			m.stop()
+	var was_ok := not m.exhausted()
+	m.energy = maxf(0.0, m.energy - drain * dt)
+	m.mover.speed = Mover.BASE_SPEED * m.speed_factor()
+	if was_ok and m.exhausted():
+		_stop_manager_work()
+		if m.state == Manager.State.TRABAJANDO:
+			m.state = Manager.State.LIBRE
+		announcement.emit("Estás agotado: tómate un café para recuperarte", m.mover.last_cell)
+
+
 func _update_manager(dt: float) -> void:
+	_update_manager_energy(dt)
 	# Trabajando en sala (una tarea suelta o atendiendo/limpiando de continuo).
 	if manager.state == Manager.State.TRABAJANDO or (manager.state == Manager.State.LIBRE and manager.covering != ""):
 		_walk(manager.mover, "m", dt)
@@ -388,6 +423,8 @@ func _update_manager(dt: float) -> void:
 	var event := manager.step(dt, layout, cells_taken_by_others("m"), can_enter,
 			person_cell(target) if not target.is_empty() else null)
 	if event.has("usar"):
+		if event["usar"] == "cafetera":
+			manager.coffee_left = COFFEE_MINUTES
 		manager_started_using.emit(event["usar"])
 	elif event.has("hablar"):
 		var who = event["hablar"]["entity"]
@@ -959,6 +996,8 @@ func _restock() -> void:
 
 
 func _close_day() -> void:
+	# Por la noche el gestor descansa.
+	manager.energy = 100.0
 	# El servicio de limpieza de la noche deja el local impecable para mañana.
 	for t in layout.tables:
 		t.dirty = false

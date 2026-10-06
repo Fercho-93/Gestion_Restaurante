@@ -52,8 +52,8 @@ func _process(_delta: float) -> void:
 	money_label.text = "%s €" % format_money(sim.finances.money)
 	rating_label.text = "Reputación %.1f/5" % sim.average_stars()
 	var status := "Abierto" if sim.is_open_for_new_customers() else "Cerrado"
-	stats_label.text = "%s · En sala: %d · Atendidos hoy: %d · Perdidos: %d · En cocina: %d platos" % [
-		status, sim.customers_inside(), sim.day_stats["clientes_servidos"],
+	stats_label.text = "Energía %d%% · %s · En sala: %d · Atendidos hoy: %d · Perdidos: %d · En cocina: %d platos" % [
+		roundi(sim.manager.energy), status, sim.customers_inside(), sim.day_stats["clientes_servidos"],
 		sim.day_stats["grupos_perdidos"], sim.kitchen_queue.size() + _dishes_cooking()]
 
 

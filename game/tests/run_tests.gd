@@ -27,6 +27,7 @@ func _initialize() -> void:
 	test_talk_effects()
 	test_manager_works_and_cleaning()
 	test_room_life()
+	test_manager_energy()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -655,3 +656,44 @@ func test_room_life() -> void:
 			break
 	check(played, "el niño se levanta a jugar")
 	check(family.child_state == "" and family.members[2].last_cell == family.table.seats[2], "y vuelve a su sitio")
+
+
+func test_manager_energy() -> void:
+	var sim := RestaurantSim.new(load_data(), 12 * 60, 8)
+	var m := sim.manager
+	# Parado gasta poco; trabajando, bastante más.
+	var e0 := m.energy
+	for i in 600:
+		sim.update(0.1)
+	var idle_drain := e0 - m.energy
+	check(idle_drain > 0.0, "el día cansa aunque no haga nada")
+	sim.set_manager_covering("limpieza")
+	sim.stains[Vector2i(0, 0)] = null
+	sim.stains[Vector2i(7, 9)] = null
+	var e1 := m.energy
+	for i in 600:
+		sim.update(0.1)
+	check(e1 - m.energy > idle_drain, "trabajar cansa más que estar parado")
+	# Agotado: más lento y sin poder trabajar.
+	var fast := m.speed_factor()
+	m.energy = 0.1
+	for i in 20:
+		sim.update(0.1)
+	check(m.exhausted(), "se puede llegar a estar agotado")
+	check(m.covering == "" and m.state != Manager.State.TRABAJANDO, "agotado, deja de trabajar")
+	check(m.speed_factor() < fast, "cansado va más lento")
+	sim.set_manager_covering("sala")
+	check(m.covering == "", "agotado no puede ponerse a trabajar")
+	# Un café le recupera.
+	sim.order_manager_use("cafetera")
+	for i in 400:
+		sim.update(0.1)
+		if m.energy > 20.0:
+			break
+	check(m.energy >= RestaurantSim.COFFEE_ENERGY - 1.0, "el café le devuelve la energía")
+	check(m.state == Manager.State.LIBRE, "después del café queda libre")
+	# Por la noche descansa del todo.
+	m.energy = 30.0
+	while sim.minutes < 24 * 60 + 1:
+		sim.update(0.25)
+	check(m.energy >= 99.0, "por la noche recupera toda la energía")

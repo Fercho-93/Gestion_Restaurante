@@ -67,7 +67,8 @@ func _init(d: Dictionary) -> void:
 		waiter_homes.append(v2i(c))
 	manager_home = v2i(d["puesto_gestor"])
 	for o in d.get("objetos", []):
-		objects[o["id"]] = { "nombre": o["nombre"], "celda": v2i(o["celda"]), "uso": v2i(o["uso"]) }
+		objects[o["id"]] = { "nombre": o["nombre"], "celda": v2i(o["celda"]), "uso": v2i(o["uso"]),
+				"sentado": o.get("sentado", true) }
 	ambiente = float(d["ambiente"])
 	limpieza = float(d["limpieza"])
 	for c in d["cola"]:
@@ -116,7 +117,8 @@ func _build_navigation() -> void:
 			_sittable[seat] = true
 	for o in objects.values():
 		astar.set_point_solid(o["celda"])
-		_sittable[o["uso"]] = true
+		if o["sentado"]:
+			_sittable[o["uso"]] = true
 	for seat in _sittable:
 		astar.set_point_solid(seat)
 	# Quien pasa por la calle evita la fila de la cola (como haría la gente).

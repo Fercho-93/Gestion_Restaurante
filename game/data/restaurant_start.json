@@ -14,7 +14,8 @@
 			{ "nombre": "Despacho", "rect": [8, 8, 4, 2], "color": "d9bf9b" }
 		],
 		"objetos": [
-			{ "id": "ordenador", "nombre": "Ordenador", "celda": [10, 9], "uso": [9, 9] }
+			{ "id": "ordenador", "nombre": "Ordenador", "celda": [10, 9], "uso": [9, 9] },
+			{ "id": "cafetera", "nombre": "Cafetera", "celda": [8, 1], "uso": [7, 1], "sentado": false }
 		],
 		"mesas": [
 			{ "celda": [2, 2], "plazas": 4 },

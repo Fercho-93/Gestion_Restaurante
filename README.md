@@ -18,8 +18,10 @@ En el móvil, gíralo en horizontal.
 2. En el gestor de proyectos: **Importar** → selecciona `game/project.godot`.
 3. Pulsa **F5** para jugar.
 
-Controles: tocar el suelo para mover al gestor, tocar el ordenador del despacho para
-gestionar, tocar a una persona para ir a hablar con ella; arrastrar para mover la cámara,
+Controles: tocar el suelo para mover al gestor; tocar a una persona para ir a hablar
+con ella; tocarte a ti mismo para ponerte a atender mesas, limpiar o tomar un café;
+tocar una mesa sucia o una mancha para limpiarla; el ordenador del despacho para
+gestionar y la cafetera de la barra para recuperar energía; arrastrar para mover la cámara,
 pellizcar o rueda para el zoom; barra espaciadora para pausar.
 
 ![Servicio de comidas](docs/captura_3d_servicio.png)

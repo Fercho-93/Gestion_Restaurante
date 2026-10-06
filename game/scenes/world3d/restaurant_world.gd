@@ -274,19 +274,26 @@ func _update_gestor(delta: float) -> void:
 	_wave_left -= delta * maxf(1.0, Game.clock.speed)
 	var m := sim.manager
 	_gestor.position = to_world(m.mover.pos)
-	_gestor.eyes = Bot.Eyes.FELIZ
 	if m.mover.is_moving() and not m.mover.blocked:
 		_gestor.pose = Bot.Pose.ANDANDO
 		_gestor.face_direction(to_world(m.mover.facing))
 	elif m.state == Manager.State.USANDO:
-		_gestor.pose = Bot.Pose.SENTADO
 		var cell: Vector2i = sim.layout.objects[m.using]["celda"]
+		_gestor.pose = Bot.Pose.SENTADO if sim.layout.objects[m.using]["sentado"] else Bot.Pose.DE_PIE
 		_gestor.face_direction(to_world(Vector2(cell)) - _gestor.position)
 	elif m.state == Manager.State.TRABAJANDO:
 		_pose_for_task(_gestor, m.mover, m.task)
 	else:
 		_gestor.pose = Bot.Pose.DE_PIE
-	_gestor.carrying = m.task.get("tipo", "") == "servir" and m.task.get("fase", "") == "ir_mesa"
+	_gestor.carrying = (m.task.get("tipo", "") == "servir" and m.task.get("fase", "") == "ir_mesa") \
+			or (m.state == Manager.State.USANDO and m.using == "cafetera")
+	# El cansancio se le nota en la cara.
+	if m.energy < 20.0:
+		_gestor.eyes = Bot.Eyes.CERRADOS
+		_gestor.set_thought("Zzz", Color("90a4ae"))
+	else:
+		_gestor.eyes = Bot.Eyes.NORMAL if m.energy < 50.0 else Bot.Eyes.FELIZ
+		_gestor.set_thought("")
 	_gestor.waving = _wave_left > 0.0 and m.state == Manager.State.LIBRE
 
 
@@ -384,6 +391,7 @@ func _build_furniture() -> void:
 			mat.emission_enabled = true
 			mat.emission = Color("e2553b")
 	_build_office()
+	_build_coffee_machine()
 	for zone in layout.zones:
 		if not zone["bloqueada"]:
 			continue
@@ -394,6 +402,21 @@ func _build_furniture() -> void:
 					_box(Vector3(0.7, 0.5, 0.7), Vector3(x, 0.25, y), Color("c49a6c"))
 				else:
 					_box(Vector3(0.45, 0.3, 0.45), Vector3(x, 0.15, y), Color("b5885a"))
+
+
+## Cafetera sobre la barra, con su lucecita y una taza.
+func _build_coffee_machine() -> void:
+	if not sim.layout.objects.has("cafetera"):
+		return
+	var c: Vector2i = sim.layout.objects["cafetera"]["celda"]
+	var base := Vector3(c.x, 0.85, c.y)
+	_box(Vector3(0.4, 0.42, 0.34), base + Vector3(0.05, 0.21, 0), Color("37474f"))
+	_box(Vector3(0.42, 0.06, 0.36), base + Vector3(0.05, 0.45, 0), Color("263238"))
+	var light := _box(Vector3(0.04, 0.04, 0.04), base + Vector3(-0.16, 0.34, 0.1), Color("ef5350"))
+	var mat := light.material_override as StandardMaterial3D
+	mat.emission_enabled = true
+	mat.emission = Color("ef5350")
+	_box(Vector3(0.1, 0.1, 0.1), base + Vector3(-0.2, 0.05, -0.05), Color("fafafa"))
 
 
 ## Despacho: mesa con ordenador, silla del gestor, estantería y planta.

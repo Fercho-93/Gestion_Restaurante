@@ -32,6 +32,11 @@ var task := {}
 var covering := ""
 ## Trato con los clientes: el jefe suele caer bien.
 var trato := 80.0
+## Energía de 0 a 100: baja con el día (más andando y trabajando); el café y la noche la
+## recuperan. Por debajo de 50 va más lento y trata peor; a 0 está agotado.
+var energy := 100.0
+## Minutos que le quedan tomándose el café.
+var coffee_left := 0.0
 ## Textos para describir la orden actual (los pone quien da la orden).
 var talk_name := ""
 var walk_zone := ""
@@ -114,13 +119,27 @@ func step(minutes: float, layout: RestaurantLayout, occupied: Array[Vector2i], c
 	return {}
 
 
-## Rapidez al trabajar (como la de un camarero).
+## Rapidez al trabajar (como la de un camarero): baja con el cansancio.
 func speed_factor() -> float:
-	return 1.1
+	return 1.1 * (0.6 + 0.4 * clampf(energy / 50.0, 0.0, 1.0))
 
 
 func effective_trato() -> float:
-	return trato
+	return trato * (0.7 + 0.3 * clampf(energy / 50.0, 0.0, 1.0))
+
+
+func exhausted() -> bool:
+	return energy <= 0.0
+
+
+func energy_word() -> String:
+	if energy >= 70.0:
+		return "con energía"
+	if energy >= 40.0:
+		return "algo cansado"
+	if energy > 0.0:
+		return "muy cansado"
+	return "agotado"
 
 
 func describe() -> String:
@@ -130,12 +149,16 @@ func describe() -> String:
 		State.ANDANDO:
 			if target_object == "ordenador":
 				return "Yendo al ordenador"
+			if target_object == "cafetera":
+				return "Yendo a por un café"
 			if not talk_target.is_empty():
 				return "Yendo a hablar con " + talk_name if talk_name != "" else "Yendo a hablar"
 			if blocked_time > 0.0:
 				return "Esperando a que le dejen pasar"
 			return "Yendo a " + walk_zone if walk_zone != "" else "Andando"
 		State.USANDO:
+			if using == "cafetera":
+				return "Tomándose un café"
 			return "En el ordenador" if using == "ordenador" else "Usando " + using
 		State.HABLANDO:
 			return "Hablando con " + talk_name if talk_name != "" else "Hablando"
