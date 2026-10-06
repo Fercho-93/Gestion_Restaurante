@@ -82,14 +82,15 @@ func _process(delta: float) -> void:
 		for i in g.members.size():
 			var key := "g%d_%d" % [g.id, i]
 			seen[key] = true
-			var bot := _bot(key, Bot.Role.CLIENTE, g.id * 7 + i)
+			var look := Bot.appearance_for({ "entity": g, "member": i })
+			var bot := _bot(key, look[0], look[1])
 			bot.member_index = i
 			_sync_customer(bot, g, i)
 	for s in sim.staff:
 		var key := "s%d" % s.id
 		seen[key] = true
-		var role := Bot.Role.COCINERO if s.puesto == StaffMember.ROLE_COOK else Bot.Role.CAMARERO
-		_sync_staff(_bot(key, role, s.id * 3 + 1), s)
+		var look := Bot.appearance_for({ "entity": s, "member": 0 })
+		_sync_staff(_bot(key, look[0], look[1]), s)
 	for key in _bots.keys():
 		if not seen.has(key):
 			_bots[key].queue_free()

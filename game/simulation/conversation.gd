@@ -24,7 +24,7 @@ static func speaker_name(target: Dictionary) -> String:
 	if e is Manager:
 		return "Tú (gestor)"
 	if e is StaffMember:
-		return "%s (%s)" % [e.nombre, "camarero" if e.puesto == StaffMember.ROLE_WAITER else "cocina"]
+		return "%s · %s" % [e.nombre, "sala" if e.puesto == StaffMember.ROLE_WAITER else "cocina"]
 	if e is CustomerGroup:
 		var who := customer_name(e, target["member"])
 		return who + (" · cliente" if e.size == 1 else " · cliente, grupo de %d" % e.size)
@@ -85,7 +85,7 @@ static func options(target: Dictionary, sim: RestaurantSim) -> Array:
 		list.append({ "id": "disculpa", "texto": "Disculpen la espera" })
 	var at_table := g.state in [CustomerGroup.State.ESPERANDO_COMIDA, CustomerGroup.State.COMIENDO, CustomerGroup.State.ESPERANDO_CUENTA]
 	if at_table and g.birthday and not g.talked.has("tarta"):
-		list.append({ "id": "tarta", "texto": "¡Felicidades! La tarta invita la casa (%.0f €)" % RestaurantSim.CAKE_COST })
+		list.append({ "id": "tarta", "texto": "¡Felicidades! Tarta invitada (%.0f €)" % RestaurantSim.CAKE_COST })
 	if at_table and not g.talked.has("invitar"):
 		list.append({ "id": "invitar", "texto": "Les invito al postre (%.2f €)" % TREAT_COST })
 	if g.state == CustomerGroup.State.SALIENDO and g.left_angry and not g.talked.has("compensar"):
@@ -309,10 +309,10 @@ static func _food_opinion(g: CustomerGroup, sim: RestaurantSim, member: int) -> 
 	var name: String = sim.recipes[dish]["nombre"].to_lower()
 	var quality := g.food_quality_sum / maxf(1.0, float(g.dishes_ready))
 	if quality >= 75.0:
-		return "¡El %s está buenísimo!" % name
+		return "¡Riquísimo, de verdad! Gran elección: %s." % name
 	if quality >= 50.0:
-		return "El %s está correcto." % name
-	return "El %s deja bastante que desear…" % name
+		return "Está correcto, sin más. He pedido %s." % name
+	return "Pues… lo mío (%s) deja bastante que desear." % name
 
 
 static func _work_report(s: StaffMember, sim: RestaurantSim) -> String:

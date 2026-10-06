@@ -42,12 +42,25 @@ var _thought_bg: Sprite3D
 var _thought_icon: Sprite3D
 var _thought_text: Label3D
 var _thought_shown := ""
+## Escala del bocadillo (crece con un pequeño "pop" al cambiar lo que piensa).
+var _thought_pop := 1.0
 var _walk_t := 0.0
 var _idle_t := 0.0
 var _blink_left := 0.0
 var _next_blink := 3.0
 var _target_yaw := 0.0
 var _shown_eyes := -1
+
+
+## Rol y semilla de aspecto de una persona de la simulación ({entity, member}), para que
+## el mismo personaje se vea igual en la sala y en el retrato del diálogo.
+static func appearance_for(target: Dictionary) -> Array:
+	var e = target["entity"]
+	if e is Manager:
+		return [Role.GESTOR, 0]
+	if e is StaffMember:
+		return [Role.COCINERO if e.puesto == StaffMember.ROLE_COOK else Role.CAMARERO, e.id * 3 + 1]
+	return [Role.CLIENTE, e.id * 7 + int(target.get("member", 0))]
 
 
 func setup(bot_role: Role, seed_value: int) -> void:
@@ -139,6 +152,7 @@ func set_thought(icon: String, tint: Color = Color.WHITE) -> void:
 	if icon == _thought_shown:
 		return
 	_thought_shown = icon
+	_thought_pop = 0.4
 	var icons: Dictionary = resources()["thought_icons"]
 	_thought_icon.visible = icons.has(icon)
 	_thought_text.visible = not icons.has(icon) and icon != ""
@@ -171,6 +185,12 @@ func _process(delta: float) -> void:
 	_walk_t += delta * game_speed
 	_animate()
 	_update_eyes(delta)
+	if _thought != null and _thought.visible:
+		# El bocadillo aparece con un "pop" y flota suavemente.
+		_thought_pop = minf(1.0, _thought_pop + delta * 4.0)
+		var pop := 1.0 + sin(_thought_pop * PI) * 0.25 if _thought_pop < 1.0 else 1.0
+		_thought.scale = Vector3.ONE * lerpf(0.4, 1.0, _thought_pop) * pop
+		_thought.position.y = 1.05 + sin(_idle_t * 2.2) * 0.025
 	rotation.y = lerp_angle(rotation.y, _target_yaw, minf(1.0, delta * 10.0))
 
 
