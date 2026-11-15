@@ -6,7 +6,7 @@ extends Node3D
 
 signal changed
 
-enum Mode { NADA, COLOCANDO, ELEGIDO, PINTANDO, PARED, HABITACION }
+enum Mode { NADA, COLOCANDO, ELEGIDO, PINTANDO, PARED, HABITACION, TABIQUE }
 
 const OK_COLOR := Color(0.3, 0.85, 0.4, 0.55)
 const BAD_COLOR := Color(0.95, 0.3, 0.3, 0.55)
@@ -28,6 +28,9 @@ var wall_part := ""
 var wall_id := ""
 var wall_scope := "tramo"
 ## Habitación que se dibuja ("" = derribar) y la primera esquina ya marcada.
+## Paredes interiores: herramienta ("pared", "puerta", "quitar" o "rodear") y primer extremo.
+var inner_tool := ""
+var inner_corner := Vector2i(-999, -999)
 var room_type := ""
 var room_corner := Vector2i(-999, -999)
 ## Mueble del catálogo que se está colocando (nuevo o movido).
@@ -130,6 +133,22 @@ func choose_room(tipo: String) -> void:
 	_set_mode(Mode.HABITACION)
 
 
+func choose_inner(tool: String) -> void:
+	inner_tool = tool
+	inner_corner = Vector2i(-999, -999)
+	message = ""
+	match tool:
+		"pared":
+			message = "Pared: toca donde empieza y donde acaba (en línea recta)."
+		"puerta":
+			message = "Puerta: toca un trozo de pared para abrir una puerta."
+		"quitar":
+			message = "Toca la pared o la puerta que quieras tirar."
+		"rodear":
+			message = "Toca dentro de una habitación para rodearla con paredes y una puerta."
+	_set_mode(Mode.TABIQUE)
+
+
 func set_wall_scope(scope: String) -> void:
 	wall_scope = scope
 	_refresh()
@@ -137,6 +156,9 @@ func set_wall_scope(scope: String) -> void:
 
 ## Un toque en el local: mueve el fantasma, pinta, cambia una pared o elige el mueble tocado.
 func tap(screen_pos: Vector2) -> void:
+	if mode == Mode.TABIQUE:
+		_tap_inner(screen_pos)
+		return
 	if mode == Mode.HABITACION:
 		_tap_room(screen_pos)
 		return
@@ -171,6 +193,35 @@ func tap(screen_pos: Vector2) -> void:
 	rot = f["rot"]
 	message = ""
 	_set_mode(Mode.ELEGIDO)
+
+
+## Paredes interiores: líneas (dos toques), puertas, derribos y rodear una habitación.
+func _tap_inner(screen_pos: Vector2) -> void:
+	var ground := camera.screen_to_ground(screen_pos)
+	var c := Vector2i(roundi(ground.x), roundi(ground.z))
+	var result := ""
+	match inner_tool:
+		"pared":
+			if inner_corner == Vector2i(-999, -999):
+				inner_corner = c
+				message = "Toca dónde acaba la pared."
+				_refresh()
+				return
+			var line := RestaurantLayout.line_between(inner_corner, c)
+			var cost := sim.inner_cost(line, "pared")
+			result = sim.build_inner(line, "pared")
+			inner_corner = Vector2i(-999, -999)
+			message = "Pared de %d casillas%s." % [line.size(), "" if sim.free_build else " (−%d €)" % int(cost)] if result == "" else result
+		"puerta":
+			result = sim.build_inner([c], "puerta")
+			message = "Puerta abierta." if result == "" else result
+		"quitar":
+			result = sim.demolish_inner([c])
+			message = "Derribado." if result == "" else result
+		"rodear":
+			result = sim.surround_room(c)
+			message = "Habitación rodeada con una puerta." if result == "" else result
+	_refresh()
 
 
 ## Dibujar una habitación: un toque marca una esquina y el siguiente la esquina opuesta.
@@ -362,6 +413,9 @@ func _refresh() -> void:
 		_ghost.position = Vector3(cell.x, 0.02, cell.y)
 		add_child(_ghost)
 		_draw_footprint(OK_COLOR if problem == "" else BAD_COLOR)
+	elif mode == Mode.TABIQUE:
+		if inner_corner != Vector2i(-999, -999):
+			_tiles.add_child(_tile(inner_corner, PICK_COLOR, 0.02))
 	elif mode == Mode.HABITACION:
 		if room_corner != Vector2i(-999, -999):
 			_tiles.add_child(_tile(room_corner, PICK_COLOR, 0.02))

@@ -927,6 +927,86 @@ func remove_room_at(cell: Vector2i) -> String:
 	return ""
 
 
+## Precio de cada casilla de pared y de puerta.
+const WALL_PRICE := 18.0
+const DOOR_PRICE := 80.0
+
+
+func inner_cost(cells: Array, kind: String) -> float:
+	var n := 0
+	for c in cells:
+		if layout.inner_walls.get(c, "") != kind:
+			n += 1
+	return n * (WALL_PRICE if kind == "pared" else DOOR_PRICE)
+
+
+## Construye una línea de pared o una puerta. "" si se hizo, o el motivo.
+func build_inner(cells: Array, kind: String) -> String:
+	var problem := layout.inner_wall_problem(cells, kind, people_cells())
+	if problem != "":
+		return problem
+	var cost := 0.0 if free_build else inner_cost(cells, kind)
+	if cost > finances.money:
+		return "No hay dinero suficiente (cuesta %d €)" % int(cost)
+	if cost > 0.0:
+		finances.spend("obras", cost)
+	layout.set_inner_walls(cells, kind)
+	_after_layout_change()
+	finishes_changed.emit()
+	return ""
+
+
+## Tira una pared o una puerta (se recupera la mitad de lo que costó).
+func demolish_inner(cells: Array) -> String:
+	var refund := 0.0
+	var any := false
+	for c in cells:
+		if layout.inner_walls.has(c):
+			any = true
+			refund += (WALL_PRICE if layout.inner_walls[c] == "pared" else DOOR_PRICE) * RESALE_FRACTION
+	if not any:
+		return "Ahí no hay ninguna pared"
+	layout.remove_inner_walls(cells)
+	if refund > 0.0 and not free_build:
+		finances.earn("venta_muebles", refund)
+	_after_layout_change()
+	finishes_changed.emit()
+	return ""
+
+
+## Rodea la habitación que contiene esta casilla con paredes y le pone una puerta.
+func surround_room(cell: Vector2i) -> String:
+	var room := layout.room_at(cell)
+	if room.is_empty():
+		return "Toca dentro de una habitación"
+	var ring := layout.ring_around(room["rect"])
+	var cells: Array = ring["celdas"]
+	if cells.is_empty():
+		return "Ya está rodeada"
+	var door: Vector2i = ring["puerta"]
+	var walls: Array = cells.filter(func(c: Vector2i): return c != door)
+	var cost := 0.0 if free_build else inner_cost(walls, "pared") + (DOOR_PRICE if door != Vector2i(-999, -999) else 0.0)
+	if cost > finances.money:
+		return "No hay dinero suficiente (cuesta %d €)" % int(cost)
+	var people := people_cells()
+	for c in walls:
+		if people.has(c):
+			return "Hay alguien en medio: espera a que se aparte"
+	var saved := layout.inner_walls.duplicate()
+	for c in cells:
+		layout.inner_walls[c] = "puerta" if c == door else "pared"
+	layout._rebuild()
+	if layout.accessibility_problem() != "":
+		layout.inner_walls = saved
+		layout._rebuild()
+		return "Cerraría el paso a otra parte del local"
+	if cost > 0.0:
+		finances.spend("obras", cost)
+	_after_layout_change()
+	finishes_changed.emit()
+	return ""
+
+
 ## Casillas donde hay alguien parado o yendo (para no mandar a dos al mismo sitio).
 func _reserved_use_cells() -> Dictionary:
 	var taken := {}

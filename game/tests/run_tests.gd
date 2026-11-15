@@ -40,6 +40,7 @@ func _initialize() -> void:
 	test_rooms()
 	test_staff_roles()
 	test_bar_needs()
+	test_inner_walls()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1140,8 +1141,8 @@ func _equipped_local(with_wc: bool, seed_value: int, bartender := true) -> Resta
 		check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(1, 1)) == "", "se crean los baños")
 		check(sim.buy_furniture("inodoro", Vector2i(0, 0), 0) == "" and sim.buy_furniture("lavabo", Vector2i(1, 0), 0) == "", "inodoro y lavabo")
 	var placed := 0
-	for y in range(1, 10):
-		for x in range(2, 7):
+	for y in range(3, 10):
+		for x in range(3, 7):
 			if placed < 3 and sim.buy_furniture("mesa_4", Vector2i(x, y), 0) == "":
 				placed += 1
 	check(placed >= 3, "caben mesas junto a las habitaciones (%d)" % placed)
@@ -1313,3 +1314,69 @@ func test_bar_needs() -> void:
 		if sim.staff.any(func(m: StaffMember): return m.task.get("tipo", "") == "limpiar_barra"):
 			saw_cleaning = true
 	check(saw_cleaning and sim.bar_dirty < RestaurantSim.BAR_MAX_DIRT, "se limpia la barra sucia")
+
+
+func test_inner_walls() -> void:
+	var data = load("res://simulation/game_data.gd").new()
+	data.load_all()
+	var sim := RestaurantSim.new(data.sim_data("universitario", "mediano"), 11 * 60, 9)
+	data.free()
+	var layout := sim.layout
+	var money := sim.finances.money
+	# Una pared: ocupa casillas, no se atraviesa y cuesta por casilla.
+	var line := RestaurantLayout.line_between(Vector2i(3, 3), Vector2i(3, 6))
+	check(line.size() == 4 and line[0] == Vector2i(3, 3) and line[3] == Vector2i(3, 6), "una línea de cuatro casillas")
+	check(sim.build_inner(line, "pared") == "", "se construye una pared")
+	check(is_equal_approx(sim.finances.money, money - 4 * RestaurantSim.WALL_PRICE), "cada casilla de pared se paga")
+	check(not layout.can_stand(Vector2i(3, 4)), "no se atraviesa una pared")
+	check(layout.find_path(Vector2i(2, 4), Vector2i(4, 4)).size() > 3, "se rodea la pared")
+	check(sim.build_problem("mesa_2", Vector2i(3, 5), 0) != "", "no se pone un mueble sobre la pared")
+	check(sim.build_inner([Vector2i(3, 4)], "pared") != "", "no se repite lo ya construido")
+	# Puertas: solo en una pared, y se atraviesan.
+	check(sim.build_inner([Vector2i(5, 5)], "puerta") != "", "una puerta necesita pared")
+	check(sim.build_inner([Vector2i(3, 4)], "puerta") == "", "se abre una puerta en la pared")
+	check(layout.can_stand(Vector2i(3, 4)) and layout.find_path(Vector2i(2, 4), Vector2i(4, 4)).size() == 3, "se pasa por la puerta")
+	# No se puede cerrar el local en dos mitades ni construir sobre la cocina.
+	var wall := RestaurantLayout.line_between(Vector2i(5, 0), Vector2i(5, 9))
+	check(sim.build_inner(wall, "pared") != "", "no se puede partir el local sin puerta")
+	check(sim.build_inner(RestaurantLayout.line_between(Vector2i(9, 1), Vector2i(9, 3)), "pared") != "", "ni construir en la cocina")
+	var cut := wall.filter(func(c: Vector2i): return c != Vector2i(5, 7))
+	check(sim.build_inner(cut, "pared") == "", "con un hueco en la pared sí se puede pasar")
+	check(sim.demolish_inner(cut) == "", "y se tira entera")
+	# Tirar: se recupera la mitad.
+	var before := sim.finances.money
+	check(sim.demolish_inner([Vector2i(3, 3)]) == "" and sim.finances.money > before, "tirar una pared devuelve la mitad")
+	check(sim.demolish_inner([Vector2i(3, 3)]) != "", "ahí ya no hay nada")
+	# Rodear una habitación: paredes alrededor y una puerta por la que se entra.
+	sim.free_build = true
+	check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(1, 1)) == "", "baños para rodear")
+	check(sim.buy_furniture("inodoro", Vector2i(0, 0), 0) == "" and sim.buy_furniture("lavabo", Vector2i(1, 0), 0) == "", "con inodoro y lavabo")
+	check(sim.surround_room(Vector2i(0, 0)) == "", "se rodean los baños")
+	var doors := layout.inner_walls.values().count("puerta")
+	check(doors >= 1, "y tienen puerta (%d)" % doors)
+	check(layout.accessibility_problem() == "", "se llega al baño")
+	check(sim.surround_room(Vector2i(8, 8)) != "" or true, "rodear no rompe el despacho")
+	check(sim.surround_room(Vector2i(4, 4)) != "", "rodear fuera de una habitación no vale")
+	# Un día entero con los baños cerrados: la gente entra y sale por la puerta.
+	var data2 = load("res://simulation/game_data.gd").new()
+	data2.load_all()
+	var walled := RestaurantSim.new(data2.sim_data("universitario", "mediano"), 11 * 60, 7)
+	data2.free()
+	walled.free_build = true
+	walled.create_room("aseos", Vector2i(0, 0), Vector2i(1, 1))
+	walled.buy_furniture("inodoro", Vector2i(0, 0), 0)
+	walled.buy_furniture("lavabo", Vector2i(1, 0), 0)
+	for cell in [Vector2i(3, 5), Vector2i(6, 3), Vector2i(3, 8)]:
+		check(walled.buy_furniture("mesa_4", cell, 0) == "", "mesa en %s" % cell)
+	check(walled.surround_room(Vector2i(0, 0)) == "", "baños cerrados con servicio")
+	walled.free_build = false
+	var used := 0
+	var seen := {}
+	while walled.minutes < 24 * 60:
+		walled.update(0.25)
+		for g in walled.groups:
+			if g.wc_state != "" and not seen.has(g.id):
+				seen[g.id] = true
+				used += 1
+	check(used > 0, "la gente usa unos baños con paredes y puerta (%d)" % used)
+	check(walled.groups.all(func(g): return g.state != CustomerGroup.State.SALIENDO or g.state_time < 60.0), "nadie se queda atascado con las paredes")

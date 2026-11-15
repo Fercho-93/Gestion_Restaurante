@@ -70,6 +70,9 @@ var floor_catalog: Dictionary = {}
 var wall_catalog: Dictionary = {}
 var floors := {}
 var walls := {}
+## Paredes interiores (tabiques) y puertas: celda -> "pared" o "puerta". Las paredes ocupan
+## su casilla y no se atraviesan; las puertas sí.
+var inner_walls := {}
 ## Filas de la fachada que son la puerta (no se pueden editar).
 var door_rows: Array[int] = []
 ## Habitaciones: tipos (de habitaciones.json) y las creadas {id, tipo, rect: Rect2i}.
@@ -249,6 +252,9 @@ func placement_problem(tipo: String, cell: Vector2i, rot: int, ignore_uid: int =
 		for c in fp["solid"] + fp["seats"]:
 			if not room_at(c).is_empty():
 				return "Las mesas van en el comedor, no en una habitación"
+	for c in fp["solid"] + fp["seats"]:
+		if inner_walls.has(c):
+			return "Ahí hay una pared"
 	var taken := {}
 	for f in furniture:
 		if f["uid"] == ignore_uid:
@@ -393,6 +399,9 @@ func _build_navigation() -> void:
 			astar.fill_solid_region(zone["rect"])
 	for c in counter_cells + obstacles:
 		astar.set_point_solid(c)
+	for c in inner_walls:
+		if inner_walls[c] == "pared":
+			astar.set_point_solid(c)
 	for table in tables:
 		astar.set_point_solid(table.cell)
 		for seat in table.seats:
@@ -802,3 +811,90 @@ func bar_posts() -> Array[Vector2i]:
 						out.append(c)
 						break
 	return out
+
+
+# --- Paredes interiores y puertas --------------------------------------------------------
+
+## Por qué no se pueden poner estas paredes (o puertas) ("" si se puede).
+func inner_wall_problem(cells: Array, kind: String, people: Array[Vector2i] = []) -> String:
+	if cells.is_empty():
+		return "No hay nada que construir ahí"
+	var changes := 0
+	for c in cells:
+		if not buildable.has(c):
+			return "Ahí no se puede construir (cocina, puertas de la calle o puestos del personal)"
+		if inner_walls.get(c, "") == kind:
+			continue
+		if kind == "puerta" and inner_walls.get(c, "") != "pared":
+			return "Las puertas van en una pared"
+		if not furniture_all_at(c).is_empty():
+			return "Hay un mueble en medio"
+		if people.has(c):
+			return "Hay alguien en medio"
+		changes += 1
+	if changes == 0:
+		return "Ya está construido"
+	# Se prueba de verdad: todo el local tiene que seguir siendo accesible.
+	var saved := inner_walls.duplicate()
+	for c in cells:
+		inner_walls[c] = kind
+	_rebuild()
+	var problem := accessibility_problem()
+	inner_walls = saved
+	_rebuild()
+	return "Cerraría el paso: deja una puerta" if problem != "" else ""
+
+
+func set_inner_walls(cells: Array, kind: String) -> int:
+	var changed := 0
+	for c in cells:
+		if inner_walls.get(c, "") != kind:
+			inner_walls[c] = kind
+			changed += 1
+	if changed > 0:
+		_rebuild()
+	return changed
+
+
+func remove_inner_walls(cells: Array) -> int:
+	var removed := 0
+	for c in cells:
+		if inner_walls.erase(c):
+			removed += 1
+	if removed > 0:
+		_rebuild()
+	return removed
+
+
+## Línea de casillas entre dos toques (en horizontal o vertical, la dirección más larga).
+static func line_between(a: Vector2i, b: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	if absi(b.x - a.x) >= absi(b.y - a.y):
+		for x in range(mini(a.x, b.x), maxi(a.x, b.x) + 1):
+			out.append(Vector2i(x, a.y))
+	else:
+		for y in range(mini(a.y, b.y), maxi(a.y, b.y) + 1):
+			out.append(Vector2i(a.x, y))
+	return out
+
+
+## Casillas del anillo que rodea a una habitación y cuál de ellas queda como puerta
+## (la más cercana a la recepción). Solo las que se pueden construir.
+func ring_around(rect: Rect2i) -> Dictionary:
+	var cells: Array[Vector2i] = []
+	var door := Vector2i(-999, -999)
+	var best := INF
+	for x in range(rect.position.x - 1, rect.end.x + 1):
+		for y in range(rect.position.y - 1, rect.end.y + 1):
+			var c := Vector2i(x, y)
+			if rect.has_point(c) or not buildable.has(c):
+				continue
+			if not furniture_all_at(c).is_empty() or inner_walls.has(c):
+				continue
+			cells.append(c)
+			var corner := (x < rect.position.x or x >= rect.end.x) and (y < rect.position.y or y >= rect.end.y)
+			var d := Vector2(c - reception_cell).length()
+			if not corner and d < best:
+				best = d
+				door = c
+	return { "celdas": cells, "puerta": door }

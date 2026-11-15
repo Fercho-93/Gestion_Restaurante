@@ -194,8 +194,21 @@ Plan por pasos:
      las usan de verdad: van al baño mientras esperan o comen (sin baños se quejan y baja la
      valoración), el que lidera el grupo deja los abrigos en el ropero, y los que esperan mesa
      se sientan en la barra a tomar algo (dinero extra y más paciencia).
-   - Pendiente: paredes y puertas interiores (las habitaciones son zonas abiertas), más
-     reglas (aforo, limpieza de baños, camarero en la barra).
+   - ✅ **Paredes interiores y puertas**: se dibujan por casillas en línea recta, se les
+     abre una puerta, se tiran (recuperando la mitad) o se rodea una habitación entera con
+     paredes y una puerta. Ocupan su casilla y no se atraviesan; el juego no deja cerrar el
+     paso a ninguna parte del local.
+   - ✅ **Barra con servicio**: solo abre si hay alguien con el rol de barra tras el
+     mostrador, bebidas en el almacén (se reponen con el pedido diario) y no está sucia.
+     Cada copa ensucia la barra; la limpia el personal de limpieza (o el de la barra).
+   - Pendiente: aforo y limpieza de los baños.
+
+#### Personal y roles
+El gestor contrata entre 3 candidatos nuevos cada día y asigna a cada empleado uno de
+estos roles según sus características (velocidad, trato, habilidad): **cocina**, **sala**
+(toma nota, sirve y cobra), **barra**, **acompañar** a los clientes a la mesa y
+**limpieza**. Cada uno solo hace las tareas de su rol; si nadie acompaña o limpia, lo
+hace la sala. El módulo Personal del ordenador muestra la aptitud de cada uno para cada rol.
 4. **Nuevas necesidades**: aseos para clientes, sala de descanso para el personal.
 5. **Vida visual**: día y noche, luces, fachada y calle según el barrio, sonido.
 6. **Empezar de cero**: elegir un local vacío del barrio (tamaño, forma, precio) y montarlo.

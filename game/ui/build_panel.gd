@@ -150,6 +150,10 @@ func _show_tab(tab: String) -> void:
 				var def: Dictionary = layout.room_types[id]
 				_add_card("h:" + id, def["nombre"], "%d € por casilla" % int(def["precio_casilla"]), Icon.new("habitacion", id, Color(def["color"])), build.choose_room.bind(id))
 			_add_card("h:", "Derribar", "Si está sin equipo", Icon.new("quitar", ""), build.choose_room.bind(""))
+			_add_card("t:rodear", "Rodear con paredes", "%d €/casilla + puerta" % int(RestaurantSim.WALL_PRICE), Icon.new("pared", "rodear"), build.choose_inner.bind("rodear"))
+			_add_card("t:pared", "Pared interior", "%d € por casilla" % int(RestaurantSim.WALL_PRICE), Icon.new("pared", "pared"), build.choose_inner.bind("pared"))
+			_add_card("t:puerta", "Puerta", "%d € · en una pared" % int(RestaurantSim.DOOR_PRICE), Icon.new("pared", "puerta"), build.choose_inner.bind("puerta"))
+			_add_card("t:quitar", "Tirar pared o puerta", "Recuperas la mitad", Icon.new("pared", "quitar"), build.choose_inner.bind("quitar"))
 			for id in layout.catalog:
 				var def: Dictionary = layout.catalog[id]
 				if def.get("categoria", "") == "equipo":
@@ -263,6 +267,25 @@ class Icon extends Control:
 				draw_rect(Rect2(c - Vector2(70, 40), Vector2(140, 80)), Color(tint, 0.55))
 				draw_rect(Rect2(c - Vector2(70, 40), Vector2(140, 80)), tint.darkened(0.3), false, 3.0)
 				draw_string(ThemeDB.fallback_font, c + Vector2(-44, 8), id.to_upper().substr(0, 7), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, tint.darkened(0.6))
+			"pared":
+				var brown := Color("8a5a35")
+				var wall := Color("cdbf9f")
+				match id:
+					"quitar":
+						draw_rect(Rect2(c + Vector2(-60, -8), Vector2(120, 16)), wall)
+						draw_line(c + Vector2(-30, -30), c + Vector2(30, 30), Color("e57373"), 5.0)
+						draw_line(c + Vector2(-30, 30), c + Vector2(30, -30), Color("e57373"), 5.0)
+					"puerta":
+						draw_rect(Rect2(c + Vector2(-60, -8), Vector2(40, 16)), wall)
+						draw_rect(Rect2(c + Vector2(20, -8), Vector2(40, 16)), wall)
+						draw_rect(Rect2(c + Vector2(-20, -34), Vector2(6, 52)), brown)
+						draw_rect(Rect2(c + Vector2(14, -34), Vector2(6, 52)), brown)
+						draw_rect(Rect2(c + Vector2(-20, -34), Vector2(40, 6)), brown)
+					"rodear":
+						draw_rect(Rect2(c + Vector2(-50, -32), Vector2(100, 64)), wall, false, 8.0)
+						draw_rect(Rect2(c + Vector2(-10, 24), Vector2(20, 12)), Color("f3e6d3"))
+					_:
+						draw_rect(Rect2(c + Vector2(-60, -8), Vector2(120, 16)), wall)
 			"quitar":
 				draw_rect(Rect2(Vector2(c.x - 40, c.y - 30), Vector2(80, 60)), Color("e0d3bd"), false, 3.0)
 				draw_line(c + Vector2(-34, -24), c + Vector2(34, 24), Color("e57373"), 5.0)
@@ -381,6 +404,10 @@ func _refresh() -> void:
 			for scope in [["tramo", "Un tramo"], ["pared", "Pared entera"]]:
 				_choice(scope[1], build.wall_scope == scope[0], build.set_wall_scope.bind(scope[0]))
 			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
+		BuildMode.Mode.TABIQUE:
+			if text == "":
+				text = "Toca el suelo para construir."
+			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
 		BuildMode.Mode.HABITACION:
 			if text == "":
 				text = "Toca una esquina de la habitación." if build.room_type != "" else "Toca la habitación que quieras derribar."
@@ -410,6 +437,8 @@ func _is_chosen(key: String) -> bool:
 		return build.mode == BuildMode.Mode.COLOCANDO and build.uid == -1 and build.tipo == key.substr(2)
 	if key.begins_with("f:"):
 		return build.mode == BuildMode.Mode.PINTANDO and build.floor_material == key.substr(2)
+	if key.begins_with("t:"):
+		return build.mode == BuildMode.Mode.TABIQUE and build.inner_tool == key.substr(2)
 	if key.begins_with("h:"):
 		return build.mode == BuildMode.Mode.HABITACION and build.room_type == key.substr(2)
 	if key.begins_with("p:"):

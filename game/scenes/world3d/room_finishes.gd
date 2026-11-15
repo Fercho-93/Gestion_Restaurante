@@ -15,6 +15,7 @@ var night := 0.0
 var _floor_root: Node3D
 var _wall_root: Node3D
 var _room_root: Node3D
+var _inner_root: Node3D
 var _wall_mats := {}
 var _floor_mats := {}
 var _glass_mat: StandardMaterial3D
@@ -48,6 +49,8 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	add_child(_highlight)
 	_room_root = Node3D.new()
 	add_child(_room_root)
+	_inner_root = Node3D.new()
+	add_child(_inner_root)
 	sim.finishes_changed.connect(rebuild)
 	sim.layout_changed.connect(_build_rooms)
 	rebuild()
@@ -63,6 +66,7 @@ func rebuild() -> void:
 	_build_floors()
 	_build_walls()
 	_build_rooms()
+	_build_inner_walls()
 	set_night(night)
 
 
@@ -420,3 +424,55 @@ func _flat(color: Color) -> StandardMaterial3D:
 	if color.a < 1.0:
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	return mat
+
+
+# --- Paredes interiores y puertas ------------------------------------------------------
+
+const INNER_HEIGHT := 1.15
+const INNER_THICKNESS := 0.16
+
+
+## Cada pared es un poste con brazos hacia las paredes y puertas vecinas, así que las
+## líneas de casillas se ven como una sola pared fina. Las puertas llevan marco de madera.
+func _build_inner_walls() -> void:
+	if _inner_root == null:
+		return
+	for child in _inner_root.get_children():
+		child.queue_free()
+	var layout := sim.layout
+	var mat := _style_mat("crema")
+	var wood := StandardMaterial3D.new()
+	wood.albedo_color = Color("8a5a35")
+	wood.roughness = 0.7
+	for cell in layout.inner_walls:
+		var kind: String = layout.inner_walls[cell]
+		var center := Vector3(cell.x, 0.0, cell.y)
+		var links := {}
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			links[d] = layout.inner_walls.has(cell + d)
+		if kind == "pared":
+			_inner_box(Vector3(INNER_THICKNESS, INNER_HEIGHT, INNER_THICKNESS), center + Vector3(0, INNER_HEIGHT / 2.0, 0), mat)
+			for d in links:
+				if links[d]:
+					var arm := Vector3(0.5, INNER_HEIGHT, INNER_THICKNESS) if d.x != 0 else Vector3(INNER_THICKNESS, INNER_HEIGHT, 0.5)
+					_inner_box(arm, center + Vector3(d.x * 0.25, INNER_HEIGHT / 2.0, d.y * 0.25), mat)
+		else:
+			# Puerta: dos postes a los lados del hueco y un dintel, a lo largo de la pared.
+			var along_x: bool = links[Vector2i(1, 0)] or links[Vector2i(-1, 0)] or not (links[Vector2i(0, 1)] or links[Vector2i(0, -1)])
+			var axis := Vector3(1, 0, 0) if along_x else Vector3(0, 0, 1)
+			for sign in [-1.0, 1.0]:
+				_inner_box(Vector3(0.12, 1.5, 0.12), center + axis * 0.44 * sign + Vector3(0, 0.75, 0), wood)
+				var arm_size := Vector3(0.18, INNER_HEIGHT, INNER_THICKNESS) if along_x else Vector3(INNER_THICKNESS, INNER_HEIGHT, 0.18)
+				_inner_box(arm_size, center + axis * 0.41 * sign + Vector3(0, INNER_HEIGHT / 2.0, 0), mat)
+			var lintel := Vector3(1.0, 0.1, 0.14) if along_x else Vector3(0.14, 0.1, 1.0)
+			_inner_box(lintel, center + Vector3(0, 1.45, 0), wood)
+
+
+func _inner_box(size: Vector3, pos: Vector3, material: Material) -> void:
+	var m := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	m.mesh = mesh
+	m.material_override = material
+	m.position = pos
+	_inner_root.add_child(m)
