@@ -1,13 +1,13 @@
 extends Control
 ## Pantalla de inicio: el jugador elige en qué barrio abre su restaurante. Cada barrio
 ## tiene su gente, sus precios, su alquiler y sus horas fuertes.
-## Estilo minimalista con paneles de cristal esmerilado sobre un fondo oscuro y suave.
+## Estilo minimalista con paneles de cristal esmerilado sobre un fondo claro en azules, grises y blancos.
 
-const INK := Color("f4f1ea")
-const SOFT_INK := Color(0.96, 0.94, 0.9, 0.62)
-const FAINT_INK := Color(0.96, 0.94, 0.9, 0.42)
-const ACCENT := Color("d9c7a3")  # único acento: champán suave
-const GLASS_LINE := Color(1, 1, 1, 0.2)
+const INK := Color("2f3a48")  # gris azulado oscuro
+const SOFT_INK := Color("5d6b7c")
+const FAINT_INK := Color("8693a3")
+const ACCENT := Color("6fa8dc")  # único acento: azul claro
+const GLASS_LINE := Color(1, 1, 1, 0.85)
 
 const BG_SHADER := """
 shader_type canvas_item;
@@ -15,10 +15,11 @@ float blob(vec2 uv, vec2 c, float r) {
 	return smoothstep(r, 0.0, distance(uv, c));
 }
 void fragment() {
-	vec3 col = mix(vec3(0.075, 0.08, 0.095), vec3(0.13, 0.135, 0.15), UV.y);
-	col += vec3(0.85, 0.75, 0.6) * blob(UV, vec2(0.12, 0.1), 0.55) * 0.16;
-	col += vec3(0.6, 0.68, 0.8) * blob(UV, vec2(0.9, 0.45), 0.6) * 0.13;
-	col += vec3(0.8, 0.8, 0.85) * blob(UV, vec2(0.35, 0.95), 0.6) * 0.1;
+	vec3 col = mix(vec3(0.93, 0.95, 0.975), vec3(0.85, 0.89, 0.93), UV.y);
+	col = mix(col, vec3(0.62, 0.78, 0.94), blob(UV, vec2(0.1, 0.08), 0.6) * 0.7);
+	col = mix(col, vec3(0.72, 0.82, 0.92), blob(UV, vec2(0.92, 0.5), 0.6) * 0.65);
+	col = mix(col, vec3(1.0), blob(UV, vec2(0.45, 0.35), 0.45) * 0.6);
+	col = mix(col, vec3(0.7, 0.75, 0.82), blob(UV, vec2(0.3, 1.0), 0.55) * 0.5);
 	COLOR = vec4(col, 1.0);
 }
 """
@@ -29,7 +30,7 @@ uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform vec2 rect_size = vec2(100.0);
 uniform float radius = 26.0;
 uniform float blur = 3.0;
-uniform vec4 tint : source_color = vec4(1.0, 1.0, 1.0, 0.07);
+uniform vec4 tint : source_color = vec4(1.0, 1.0, 1.0, 0.45);
 void fragment() {
 	vec2 p = (UV - 0.5) * rect_size;
 	vec2 q = abs(p) - rect_size * 0.5 + vec2(radius);
@@ -37,7 +38,7 @@ void fragment() {
 	float a = 1.0 - smoothstep(-1.0, 0.0, d);
 	vec3 c = textureLod(screen_tex, SCREEN_UV, blur).rgb;
 	c = mix(c, tint.rgb, tint.a);
-	c += vec3(0.05) * (1.0 - UV.y);  // brillo sutil arriba
+	c += vec3(0.06) * (1.0 - UV.y);  // brillo sutil arriba
 	COLOR = vec4(c, a);
 }
 """
@@ -86,7 +87,7 @@ func _ready() -> void:
 
 
 ## Panel de cristal: desenfoque del fondo + velo claro + borde fino.
-func _glass(radius: int, tint_alpha := 0.07) -> PanelContainer:
+func _glass(radius: int, tint_alpha := 0.45) -> PanelContainer:
 	var root := PanelContainer.new()
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
@@ -156,18 +157,18 @@ func _card(b: Dictionary) -> Control:
 		s.set_border_width_all(1)
 		match state:
 			"hover":
-				s.bg_color = Color(1, 1, 1, 0.16)
-				s.border_color = Color(ACCENT, 0.7)
+				s.bg_color = Color(ACCENT, 0.28)
+				s.border_color = Color(ACCENT, 0.9)
 			"pressed":
-				s.bg_color = Color(1, 1, 1, 0.24)
+				s.bg_color = Color(ACCENT, 0.42)
 				s.border_color = ACCENT
 			_:
-				s.bg_color = Color(1, 1, 1, 0.07)
-				s.border_color = Color(1, 1, 1, 0.28)
+				s.bg_color = Color(1, 1, 1, 0.55)
+				s.border_color = Color(1, 1, 1, 0.9)
 		button.add_theme_stylebox_override(state, s)
 	button.add_theme_color_override("font_color", INK)
-	button.add_theme_color_override("font_hover_color", ACCENT)
-	button.add_theme_color_override("font_pressed_color", ACCENT)
+	button.add_theme_color_override("font_hover_color", INK)
+	button.add_theme_color_override("font_pressed_color", INK)
 	button.add_theme_color_override("font_focus_color", INK)
 	button.pressed.connect(Game.start.bind(b["id"]))
 	box.add_child(button)
@@ -189,10 +190,10 @@ func _label(text: String, size: int, color: Color, bold := false) -> Label:
 func _chip(text: String) -> Control:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(1, 1, 1, 0.05)
+	style.bg_color = Color(ACCENT, 0.16)
 	style.set_corner_radius_all(16)
 	style.set_border_width_all(1)
-	style.border_color = Color(1, 1, 1, 0.22)
+	style.border_color = Color(ACCENT, 0.45)
 	style.content_margin_left = 14
 	style.content_margin_right = 14
 	style.content_margin_top = 4
