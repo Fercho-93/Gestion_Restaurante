@@ -38,6 +38,7 @@ func _initialize() -> void:
 	test_buying_a_local()
 	test_floors_and_walls()
 	test_rooms()
+	test_staff_roles()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1215,3 +1216,50 @@ func test_rooms() -> void:
 	while bare.minutes < 24 * 60:
 		bare.update(0.25)
 	check(bare_report.get("sin_banos", 0) > 0, "sin baños hay quien pregunta por ellos (%d)" % bare_report.get("sin_banos", 0))
+
+
+func test_staff_roles() -> void:
+	var sim := _equipped_local(true, 11)
+	var lucia: StaffMember = sim.staff.filter(func(m: StaffMember): return m.rol == "sala")[0]
+	check(lucia.rol == "sala" and lucia.puesto == StaffMember.ROLE_WAITER, "el camarero de serie está en sala")
+	check(sim.staff.any(func(m: StaffMember): return m.rol == "cocina"), "y el cocinero en cocina")
+	check(sim.candidates.size() == RestaurantSim.CANDIDATES_PER_DAY, "hay candidatos para contratar")
+	var salary: float = sim.candidates[0]["salario_dia"]
+	check(salary >= 60.0 and salary <= 120.0, "el sueldo sale de sus características (%d)" % int(salary))
+	# Contratar y repartir roles.
+	check(sim.hire(0) == "" and sim.staff.size() == 3 and sim.candidates.size() == 2, "se contrata a un candidato")
+	check(sim.hire(0) == "" and sim.staff.size() == 4, "y a otro")
+	var cleaner: StaffMember = sim.staff[2]
+	var greeter: StaffMember = sim.staff[3]
+	check(sim.set_role(cleaner, "limpieza") == "" and cleaner.rol == "limpieza", "uno pasa a limpieza")
+	check(sim.set_role(greeter, "acomodador") == "" and greeter.puesto == StaffMember.ROLE_WAITER, "otro a acompañar clientes")
+	check(sim.set_role(greeter, "acomodador") != "", "no se puede dar el rol que ya tiene")
+	# Dos fogones: el segundo cocinero cabe, el tercero no.
+	check(sim.set_role(greeter, "cocina") == "" and sim.staff_count("cocina") == 2, "dos cocineros caben")
+	check(sim.set_role(cleaner, "cocina") != "", "no hay un tercer fogón")
+	check(sim.layout.cook_stations.has(greeter.home), "el segundo cocinero va a un fogón")
+	check(sim.set_role(greeter, "acomodador") == "", "y se le devuelve a acompañar")
+	check(sim.set_role(lucia, "barra") != "" or sim.layout.bar_posts().size() > 0, "sin sitio tras la barra no se pone a nadie")
+	# Cada uno solo hace lo suyo.
+	var done := { "sala": {}, "limpieza": {}, "acomodador": {}, "cocina": {} }
+	while sim.minutes < 24 * 60:
+		sim.update(0.25)
+		for m in sim.staff:
+			if m.task.has("tipo") and done.has(m.rol):
+				done[m.rol][m.task["tipo"]] = true
+	check(not done["limpieza"].has("pedido") and not done["limpieza"].has("servir") and not done["limpieza"].has("acomodar"), "limpieza no atiende mesas")
+	check(done["limpieza"].has("recoger_mesa"), "limpieza recoge las mesas")
+	check(done["acomodador"].keys() == ["acomodar"], "acompañar solo acompaña (%s)" % str(done["acomodador"].keys()))
+	check(not done["sala"].has("recoger_mesa") and not done["sala"].has("fregar") and not done["sala"].has("acomodar"), "con limpieza y acompañante, la sala solo atiende")
+	check(done["sala"].has("pedido") and done["sala"].has("servir") and done["sala"].has("cobrar"), "la sala toma nota, sirve y cobra")
+	# Sin acompañante ni limpieza, la sala hace de todo (como antes).
+	sim.set_role(cleaner, "sala")
+	sim.set_role(greeter, "sala")
+	check(sim._allowed_for(lucia).has("acomodar") and sim._allowed_for(lucia).has("recoger_mesa"), "sin especialistas, la sala hace de todo")
+	# Despedir.
+	var count := sim.staff.size()
+	check(sim.fire(cleaner) == "" and sim.staff.size() == count - 1, "se despide a alguien")
+	var solo := RestaurantSim.new(load_data("alternativo"), 9 * 60, 3)
+	while solo.staff.size() > 1:
+		solo.fire(solo.staff[0])
+	check(solo.fire(solo.staff[0]) != "", "no se despide al último")

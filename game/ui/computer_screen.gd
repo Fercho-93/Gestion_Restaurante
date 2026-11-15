@@ -17,6 +17,7 @@ const MODULES := {
 var _tabs := {}
 var _content: VBoxContainer
 var _current := "resumen"
+var _staff_message := ""
 
 
 func _ready() -> void:
@@ -105,9 +106,127 @@ func _show(id: String) -> void:
 	_line(MODULES[id][0], 36)
 	if id == "resumen":
 		_summary()
+	elif id == "personal":
+		_staff_module()
 	else:
 		_line(MODULES[id][1], 28, Color("cfd8dc"))
 		_line("Próximamente.", 28, Color("ffd54f"))
+
+
+## Personal: elegir qué hace cada uno según sus características, contratar y despedir.
+func _staff_module() -> void:
+	var sim := Game.sim
+	_line("Elige a qué se dedica cada uno según lo que se le da bien. La aptitud (0-100) sale de sus características.", 24, Color("cfd8dc"))
+	if _staff_message != "":
+		_line(_staff_message, 26, Color("ffd54f"))
+	var total := sim.layout.cook_stations.size() + sim.layout.waiter_homes.size()
+	_line("Tu equipo · %d de %d puestos" % [sim.staff.size(), total], 30, Color("b0bec5"))
+	for s in sim.staff:
+		_content.add_child(_staff_row(s))
+	_line("Buscan trabajo hoy", 30, Color("b0bec5"))
+	if sim.candidates.is_empty():
+		_line("Hoy no hay nadie. Mañana habrá candidatos nuevos.", 24, Color("90a4ae"))
+	for i in sim.candidates.size():
+		_content.add_child(_candidate_row(i))
+
+
+func _panel_row() -> HBoxContainer:
+	var panel := PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color("2a3140")
+	style.set_corner_radius_all(12)
+	style.content_margin_left = 16
+	style.content_margin_right = 16
+	style.content_margin_top = 10
+	style.content_margin_bottom = 10
+	panel.add_theme_stylebox_override("panel", style)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 16)
+	panel.add_child(row)
+	_content.add_child(panel)
+	_content.remove_child(panel)
+	row.set_meta("panel", panel)
+	return row
+
+
+func _staff_row(s: StaffMember) -> Control:
+	var sim := Game.sim
+	var row := _panel_row()
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(info)
+	info.add_child(_label("%s · %s" % [s.nombre, s.rol_name()], 30, Color.WHITE))
+	info.add_child(_label("Velocidad %d · Trato %d · Habilidad %d · Ánimo %d (%s) · Sueldo %d €/día" % [
+			s.velocidad, s.trato, s.habilidad, roundi(s.moral), s.moral_word(), int(s.salario_dia)], 22, Color("b0bec5")))
+	var picker := OptionButton.new()
+	picker.custom_minimum_size = Vector2(420, 64)
+	picker.add_theme_font_size_override("font_size", 24)
+	var selected := 0
+	var i := 0
+	for rol in StaffMember.ROLES:
+		picker.add_item("%s · aptitud %d" % [StaffMember.ROLES[rol][0], roundi(s.aptitude(rol))], i)
+		picker.set_item_metadata(i, rol)
+		if rol == s.rol:
+			selected = i
+		i += 1
+	picker.select(selected)
+	picker.item_selected.connect(func(index: int):
+		var problem := sim.set_role(s, picker.get_item_metadata(index))
+		_staff_message = problem if problem != "" else "%s ahora está en %s." % [s.nombre, s.rol_name().to_lower()]
+		_show("personal"))
+	row.add_child(picker)
+	var fire := Button.new()
+	fire.text = "Despedir"
+	fire.custom_minimum_size = Vector2(190, 64)
+	fire.add_theme_font_size_override("font_size", 24)
+	fire.pressed.connect(func():
+		if fire.text == "Despedir":
+			fire.text = "¿Seguro?"
+			return
+		var problem := sim.fire(s)
+		_staff_message = problem if problem != "" else "Has despedido a %s." % s.nombre
+		_show("personal"))
+	row.add_child(fire)
+	return row.get_meta("panel")
+
+
+func _candidate_row(index: int) -> Control:
+	var sim := Game.sim
+	var c: Dictionary = sim.candidates[index]
+	var row := _panel_row()
+	var info := VBoxContainer.new()
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(info)
+	info.add_child(_label(c["nombre"], 28, Color.WHITE))
+	var best := "sala"
+	var probe := StaffMember.new({ "nombre": c["nombre"], "puesto": StaffMember.ROLE_WAITER, "velocidad": c["velocidad"], "trato": c["trato"],
+			"habilidad": c["habilidad"], "salario_dia": c["salario_dia"] }, 0, Vector2i.ZERO)
+	for rol in StaffMember.ROLES:
+		if probe.aptitude(rol) > probe.aptitude(best):
+			best = rol
+	info.add_child(_label("Velocidad %d · Trato %d · Habilidad %d · Sueldo %d €/día · Le iría bien en: %s" % [
+			c["velocidad"], c["trato"], c["habilidad"], int(c["salario_dia"]), StaffMember.ROLES[best][0].to_lower()], 22, Color("b0bec5")))
+	var hire := Button.new()
+	hire.text = "Contratar"
+	hire.custom_minimum_size = Vector2(190, 64)
+	hire.add_theme_font_size_override("font_size", 24)
+	hire.disabled = sim.hire_problem(index) != ""
+	hire.tooltip_text = sim.hire_problem(index)
+	hire.pressed.connect(func():
+		var problem := sim.hire(index)
+		_staff_message = problem if problem != "" else "%s se incorpora al equipo." % c["nombre"]
+		_show("personal"))
+	row.add_child(hire)
+	return row.get_meta("panel")
+
+
+func _label(text: String, font_size: int, color: Color) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", font_size)
+	label.add_theme_color_override("font_color", color)
+	return label
 
 
 func _summary() -> void:
@@ -135,7 +254,12 @@ func _summary() -> void:
 	_line("   Ingresos: %.2f €" % f.total(f.income), 28, Color("81c784"))
 	_line("   Gastos: %.2f €" % f.total(f.expenses), 28, Color("e57373"))
 	_line("   Clientes atendidos: %d · Grupos perdidos: %d" % [sim.day_stats["clientes_servidos"], sim.day_stats["grupos_perdidos"]], 28)
-	_line("Personal: %d camareros, %d cocineros" % [sim.waiters().size(), sim.cooks().size()], 28)
+	var by_role := []
+	for rol in StaffMember.ROLES:
+		var n := sim.staff.filter(func(s: StaffMember): return s.rol == rol).size()
+		if n > 0:
+			by_role.append("%d %s" % [n, StaffMember.ROLES[rol][0].to_lower()])
+	_line("Personal: %s" % ", ".join(by_role), 28)
 	_line("Platos en carta: %d" % sim.menu.size(), 28)
 
 

@@ -24,7 +24,7 @@ static func speaker_name(target: Dictionary) -> String:
 	if e is Manager:
 		return "Tú (gestor)"
 	if e is StaffMember:
-		return "%s · %s" % [e.nombre, "sala" if e.puesto == StaffMember.ROLE_WAITER else "cocina"]
+		return "%s · %s" % [e.nombre, e.rol_name().to_lower()]
 	if e is CustomerGroup:
 		var who := customer_name(e, target["member"])
 		return who + (" · cliente" if e.size == 1 else " · cliente, grupo de %d" % e.size)

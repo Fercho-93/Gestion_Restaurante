@@ -4,10 +4,29 @@ extends RefCounted
 
 const ROLE_WAITER := "camarero"
 const ROLE_COOK := "cocinero"
+## Lo que puede hacer cada empleado, a elección del gestor: id -> [nombre, qué hace].
+const ROLES := {
+	"cocina": ["Cocina", "Prepara los platos."],
+	"sala": ["Sala", "Toma nota, sirve y cobra en las mesas."],
+	"barra": ["Barra", "Sirve las copas de la barra y la mantiene limpia."],
+	"acomodador": ["Acompañar", "Recibe a los clientes y los lleva a su mesa."],
+	"limpieza": ["Limpieza", "Recoge las mesas, friega el suelo y limpia la barra."],
+}
+## Tareas de sala que hace cada rol (los demás roles no las hacen).
+const ROLE_TASKS := {
+	"cocina": [],
+	"sala": ["servir", "cobrar", "pedido"],
+	"barra": ["barra", "limpiar_barra"],
+	"acomodador": ["acomodar"],
+	"limpieza": ["recoger_mesa", "fregar", "limpiar_barra"],
+}
 
 var id: int
 var nombre: String
+## "camarero" para todos los de sala, barra, limpieza y acompañamiento; "cocinero" en cocina.
 var puesto: String
+## Lo que hace: una de las claves de ROLES.
+var rol: String
 var velocidad: float
 var trato: float
 var habilidad: float
@@ -34,13 +53,38 @@ var now := 0.0
 func _init(d: Dictionary, staff_id: int, start_cell: Vector2i) -> void:
 	id = staff_id
 	nombre = d["nombre"]
-	puesto = d["puesto"]
+	rol = d.get("rol", "cocina" if d["puesto"] == ROLE_COOK else "sala")
+	puesto = ROLE_COOK if rol == "cocina" else ROLE_WAITER
 	velocidad = float(d.get("velocidad", 50))
 	trato = float(d.get("trato", 50))
 	habilidad = float(d.get("habilidad", 50))
 	salario_dia = float(d["salario_dia"])
 	home = start_cell
 	mover = Mover.new(start_cell, Mover.BASE_SPEED * speed_factor())
+
+
+func set_rol(new_rol: String) -> void:
+	rol = new_rol
+	puesto = ROLE_COOK if rol == "cocina" else ROLE_WAITER
+
+
+func rol_name() -> String:
+	return ROLES[rol][0]
+
+
+## Lo bien que le iría un rol según sus características (0-100).
+func aptitude(for_rol: String) -> float:
+	match for_rol:
+		"cocina":
+			return habilidad * 0.6 + velocidad * 0.4
+		"sala":
+			return trato * 0.6 + velocidad * 0.4
+		"barra":
+			return trato * 0.5 + velocidad * 0.3 + habilidad * 0.2
+		"acomodador":
+			return trato * 0.8 + velocidad * 0.2
+		_:
+			return velocidad * 0.8 + habilidad * 0.2
 
 
 ## Multiplicador de rapidez: según su velocidad (0.75 a 1.25), su ánimo y si va con prisa.
@@ -92,4 +136,6 @@ func describe_task() -> String:
 		"acomodar": return "Acompañando a unos clientes"
 		"recoger_mesa": return "Recogiendo una mesa"
 		"fregar": return "Fregando el suelo"
+		"barra": return "Sirviendo en la barra"
+		"limpiar_barra": return "Limpiando la barra"
 	return "Libre"

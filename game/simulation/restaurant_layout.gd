@@ -289,6 +289,7 @@ func accessibility_problem() -> String:
 		must_reach.append(o["uso"])
 	must_reach.append_array(use_cells())
 	must_reach.append_array(stools)
+	must_reach.append_array(bar_posts())
 	for c in must_reach:
 		if find_path(from, c).is_empty():
 			return "Cortaría el paso por el local"
@@ -779,4 +780,25 @@ func working_use_cells(room_tipo: String) -> Array[Vector2i]:
 			var def: Dictionary = catalog.get(f["tipo"], {})
 			if def.get("solo_en", "") == room_tipo and def.has("uso"):
 				out.append(f["celda"] + rotate_cell(v2i(def["uso"]), f["rot"]))
+	return out
+
+
+## Sitios donde puede ponerse quien sirve la barra: casillas libres dentro de una barra
+## que funciona, pegadas a su mostrador.
+func bar_posts() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for room in rooms_of("barra"):
+		if not room_ready(room):
+			continue
+		var counters := furniture_in(room, "barra_bar")
+		var r: Rect2i = room["rect"]
+		for x in range(r.position.x, r.end.x):
+			for y in range(r.position.y, r.end.y):
+				var c := Vector2i(x, y)
+				if astar == null or not can_stand(c) or reserved.has(c) or _sittable.has(c):
+					continue
+				for f in counters:
+					if absi(f["celda"].x - c.x) <= 1 and absi(f["celda"].y - c.y) <= 1:
+						out.append(c)
+						break
 	return out

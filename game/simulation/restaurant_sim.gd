@@ -23,9 +23,12 @@ const RESTOCK_HOUR := 11
 const WAITER_ACTION_TIME := { "pedido": 1.5, "servir": 0.5, "cobrar": 1.5, "recoger": 0.5,
 	"acomodar": 0.3, "limpiar_mesa": 1.0, "fregar": 1.5 }
 ## Tareas de sala y su prioridad (menor = antes).
+const CANDIDATE_NAMES := ["Carmen", "Javier", "Rocío", "Álvaro", "Nuria", "Hugo", "Elena", "Iván", "Marta", "Raúl", "Irene", "Sergio", "Paula", "Diego", "Laura", "Adrián"]
+const CANDIDATES_PER_DAY := 3
+## Tareas de sala que se reparten entre el personal y su prioridad (menos = antes).
 const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "acomodar": 2, "pedido": 3,
-	"recoger_mesa": 4, "fregar": 5 }
-const CLEANING_TASKS := ["recoger_mesa", "fregar"]
+	"recoger_mesa": 4, "fregar": 5, "barra": 2, "limpiar_barra": 6 }
+const CLEANING_TASKS := ["recoger_mesa", "fregar", "limpiar_barra"]
 ## Manchas en el suelo como mucho (y cuánto restan a la limpieza cada una).
 const MAX_STAINS := 12
 const REGULAR_NAMES := ["Don Ramón", "Doña Encarna", "Pepe el del quiosco", "Sofía", "Tomás", "Luisa"]
@@ -68,6 +71,10 @@ var last_entry_hour: int
 var fixed_costs: Dictionary
 ## Local comprado al empezar ({id, nombre, precio, tasas_dia}); vacío si no se compró.
 var property_local: Dictionary = {}
+## Gente que busca trabajo (se renueva cada día): {nombre, velocidad, trato, habilidad, salario_dia}.
+var candidates: Array[Dictionary] = []
+var _next_staff_id := 100
+var _hiring_rng := RandomNumberGenerator.new()
 var stock_targets: Dictionary
 var rng := RandomNumberGenerator.new()
 ## Reloj absoluto en minutos de juego.
@@ -121,17 +128,10 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 	stock_targets = start["stock_objetivo"]
 	for item in start["carta"]:
 		menu[item["receta"]] = float(item["precio"])
-	var waiter_count := 0
-	var cook_count := 0
 	for d in start["personal"]:
-		var cell: Vector2i
-		if d["puesto"] == StaffMember.ROLE_COOK:
-			cell = layout.cook_stations[cook_count % layout.cook_stations.size()]
-			cook_count += 1
-		else:
-			cell = layout.waiter_homes[waiter_count % layout.waiter_homes.size()]
-			waiter_count += 1
-		staff.append(StaffMember.new(d, staff.size() + 1, cell))
+		staff.append(StaffMember.new(d, staff.size() + 1, layout.waiter_homes[0]))
+	assign_homes(true)
+	refresh_candidates()
 	manager = Manager.new(layout.manager_home)
 	minutes = start_minutes
 	_reset_day_stats()
@@ -719,6 +719,167 @@ func _after_layout_change() -> void:
 	layout_changed.emit()
 
 
+# --- Personal: roles, contratar y despedir ------------------------------------
+
+## Qué tareas de sala puede coger este empleado según su rol. Si nadie hace de acomodador
+## o de limpieza, el personal de sala se ocupa también de eso. Vacío = sin límite (gestor).
+func _allowed_for(w) -> Array:
+	if not (w is StaffMember):
+		return []
+	var tasks: Array = StaffMember.ROLE_TASKS[w.rol].duplicate()
+	if w.rol == "sala":
+		if not _has_role("acomodador"):
+			tasks.append("acomodar")
+		if not _has_role("limpieza"):
+			tasks.append_array(["recoger_mesa", "fregar"])
+	if tasks.is_empty():
+		tasks = ["__ninguna__"]
+	return tasks
+
+
+func _has_role(rol: String) -> bool:
+	return staff.any(func(s: StaffMember): return s.rol == rol)
+
+
+## Cuántos puestos hay para cada tipo de trabajo: cocina, barra o el resto (sala...).
+func staff_capacity(rol: String) -> int:
+	match rol:
+		"cocina":
+			return layout.cook_stations.size()
+		"barra":
+			return layout.bar_posts().size()
+	return layout.waiter_homes.size()
+
+
+func _group_of(rol: String) -> String:
+	return rol if rol == "cocina" or rol == "barra" else "sala"
+
+
+func staff_count(rol: String, ignoring: StaffMember = null) -> int:
+	var n := 0
+	for s in staff:
+		if s != ignoring and _group_of(s.rol) == _group_of(rol):
+			n += 1
+	return n
+
+
+## Por qué este empleado no puede tener ese rol ("" si puede).
+func role_problem(s: StaffMember, rol: String) -> String:
+	if s.rol == rol:
+		return "Ya hace eso"
+	if staff_count(rol, s) >= staff_capacity(rol):
+		match rol:
+			"cocina":
+				return "No hay más fogones libres"
+			"barra":
+				return "No hay sitio libre tras una barra que funcione"
+		return "No quedan puestos de sala libres"
+	return ""
+
+
+func set_role(s: StaffMember, rol: String) -> String:
+	var problem := role_problem(s, rol)
+	if problem != "":
+		return problem
+	if not s.task.is_empty():
+		_end_waiter_task(s)
+	if s.rol == "cocina":
+		# Lo que estaba cocinando vuelve a la cola.
+		for t in s.tickets:
+			kitchen_queue.push_front({ "grupo": t["grupo"], "receta": t["receta"] })
+		s.tickets.clear()
+	s.set_rol(rol)
+	assign_homes()
+	return ""
+
+
+## Reparte los puestos: fogones a la cocina, sitios tras la barra al de la barra y
+## el resto de sitios al personal de sala. Con `teleport`, aparecen ya en su puesto.
+func assign_homes(teleport: bool = false) -> void:
+	var idx := { "cocina": 0, "barra": 0, "sala": 0 }
+	var posts := layout.bar_posts()
+	for s in staff:
+		var group := _group_of(s.rol)
+		var cells: Array[Vector2i] = layout.cook_stations
+		if group == "barra":
+			cells = posts
+		elif group == "sala":
+			cells = layout.waiter_homes
+		if cells.is_empty():
+			cells = layout.waiter_homes
+		s.home = cells[idx[group] % cells.size()]
+		idx[group] += 1
+		if teleport:
+			s.mover = Mover.new(s.home, Mover.BASE_SPEED * s.speed_factor())
+
+
+func candidate_salary(c: Dictionary) -> float:
+	var average := (float(c["velocidad"]) + float(c["trato"]) + float(c["habilidad"])) / 3.0
+	return roundf((38.0 + average * 0.85) / 5.0) * 5.0
+
+
+## Gente nueva que busca trabajo hoy.
+func refresh_candidates() -> void:
+	candidates.clear()
+	# Su propio azar, para no alterar el de la simulación.
+	_hiring_rng.seed = hash([day(), staff.size(), _next_staff_id])
+	var names := CANDIDATE_NAMES.duplicate()
+	for i in CANDIDATES_PER_DAY:
+		var name: String = names.pop_at(_hiring_rng.randi() % names.size())
+		var c := {
+			"nombre": name,
+			"velocidad": _hiring_rng.randi_range(30, 90),
+			"trato": _hiring_rng.randi_range(30, 90),
+			"habilidad": _hiring_rng.randi_range(30, 90),
+		}
+		c["salario_dia"] = candidate_salary(c)
+		candidates.append(c)
+
+
+## Por qué no se puede contratar a este candidato ("" si sí).
+func hire_problem(index: int) -> String:
+	if index < 0 or index >= candidates.size():
+		return "Ese candidato ya no está"
+	var total_slots := layout.cook_stations.size() + layout.waiter_homes.size()
+	if staff.size() >= total_slots:
+		return "No hay más puestos: el local no da para más personal"
+	return ""
+
+
+## Contrata al candidato con el rol que tenga hueco (luego se cambia a gusto del gestor).
+func hire(index: int) -> String:
+	var problem := hire_problem(index)
+	if problem != "":
+		return problem
+	var c: Dictionary = candidates[index]
+	var rol := "sala" if staff_count("sala") < staff_capacity("sala") else "cocina"
+	var member := StaffMember.new({ "nombre": c["nombre"], "puesto": StaffMember.ROLE_WAITER, "rol": rol, "velocidad": c["velocidad"],
+			"trato": c["trato"], "habilidad": c["habilidad"], "salario_dia": c["salario_dia"] }, _next_staff_id, layout.spawn_cell)
+	_next_staff_id += 1
+	member.now = minutes
+	staff.append(member)
+	candidates.remove_at(index)
+	assign_homes()
+	member.mover = Mover.new(layout.reception_cell, Mover.BASE_SPEED * member.speed_factor())
+	return ""
+
+
+## Despide a un empleado (se le paga el día de hoy).
+func fire(s: StaffMember) -> String:
+	if not staff.has(s):
+		return "Ya no trabaja aquí"
+	if staff.size() <= 1:
+		return "Necesitas al menos un empleado"
+	if not s.task.is_empty():
+		_end_waiter_task(s)
+	for t in s.tickets:
+		kitchen_queue.push_front({ "grupo": t["grupo"], "receta": t["receta"] })
+	finances.spend("personal", s.salario_dia)
+	staff.erase(s)
+	assign_homes()
+	return ""
+
+
 # --- Habitaciones -------------------------------------------------------------
 
 ## Lo que cuesta crear una habitación en este rectángulo.
@@ -1176,7 +1337,7 @@ func _update_waiters(dt: float) -> void:
 			continue
 		_walk(w.mover, "s%d" % w.id, dt)
 		if w.task.is_empty():
-			_assign_waiter_task(w)
+			_assign_waiter_task(w, _allowed_for(w))
 		else:
 			_preempt_cleaning(w)
 		if w.task.is_empty():
@@ -1235,7 +1396,13 @@ func _preempt_cleaning(w) -> void:
 		return
 	if w.task["fase"] == "atender":
 		return
-	var urgent := _find_task(["servir", "cobrar", "acomodar", "pedido"])
+	var urgent_kinds := ["servir", "cobrar", "acomodar", "pedido"]
+	var mine := _allowed_for(w)
+	if not mine.is_empty():
+		urgent_kinds = urgent_kinds.filter(func(k: String): return mine.has(k))
+	if urgent_kinds.is_empty():
+		return
+	var urgent := _find_task(urgent_kinds)
 	if not urgent.is_empty():
 		_end_waiter_task(w)
 		start_task(w, urgent)
@@ -1526,6 +1693,9 @@ func _update_staff_mood(dt: float) -> void:
 
 func _update_cooks(dt: float) -> void:
 	for c in cooks():
+		_walk(c.mover, "s%d" % c.id, dt)
+		if c.mover.arrived() and c.mover.last_cell != c.home and cell_free_for(c.home, "s%d" % c.id):
+			c.mover.go_to(layout, c.home)
 		while c.tickets.size() < c.cooking_capacity() and not kitchen_queue.is_empty():
 			var ticket: Dictionary = kitchen_queue.pop_front()
 			var recipe: Dictionary = recipes[ticket["receta"]]
@@ -1559,6 +1729,7 @@ func _restock() -> void:
 
 
 func _close_day() -> void:
+	refresh_candidates()
 	# Por la noche el gestor descansa.
 	manager.energy = 100.0
 	# El servicio de limpieza de la noche deja el local impecable para mañana.

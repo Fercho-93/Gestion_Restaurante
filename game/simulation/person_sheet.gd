@@ -31,7 +31,7 @@ static func _manager(m: Manager) -> Dictionary:
 
 
 static func _staff(s: StaffMember) -> Dictionary:
-	var role := "Camarero/a" if s.puesto == StaffMember.ROLE_WAITER else "Cocinero/a"
+	var role := "Personal de %s" % s.rol_name().to_lower()
 	return {
 		"perfil": role,
 		"resumen": "%s · %s · Sueldo %d €/día" % [role, s.describe_task(), int(s.salario_dia)],
