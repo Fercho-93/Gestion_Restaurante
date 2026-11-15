@@ -207,6 +207,13 @@ Plan por pasos:
      hay) y del todo sucios quedan fuera de servicio, lo que cuenta como no tener baños.
      La suciedad también baja la limpieza que ven los clientes y el rótulo avisa.
 
+   - ✅ **Construir habitaciones como en los Sims**: se dibujan **arrastrando** (vista previa
+     verde o roja con el precio, y las paredes en azul); de un gesto salen la zona, el suelo
+     a juego, el equipo básico colocado según la forma de la habitación y las paredes con su
+     puerta (cada cosa se puede apagar). "Equipar habitación" completa lo que falte en una ya
+     hecha y **Deshacer** devuelve el local y el dinero a como estaban antes de cada reforma
+     (hasta 25 pasos).
+
 #### Personal y roles
 El gestor contrata entre 3 candidatos nuevos cada día y asigna a cada empleado uno de
 estos roles según sus características (velocidad, trato, habilidad): **cocina**, **sala**

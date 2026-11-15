@@ -150,6 +150,7 @@ func _show_tab(tab: String) -> void:
 				var def: Dictionary = layout.room_types[id]
 				_add_card("h:" + id, def["nombre"], "%d € por casilla" % int(def["precio_casilla"]), Icon.new("habitacion", id, Color(def["color"])), build.choose_room.bind(id))
 			_add_card("h:", "Derribar", "Si está sin equipo", Icon.new("quitar", ""), build.choose_room.bind(""))
+			_add_card("h:__equipar", "Equipar habitación", "Pone lo básico que falte", Icon.new("pared", "equipar"), build.choose_room.bind("__equipar"))
 			_add_card("t:rodear", "Rodear con paredes", "%d €/casilla + puerta" % int(RestaurantSim.WALL_PRICE), Icon.new("pared", "rodear"), build.choose_inner.bind("rodear"))
 			_add_card("t:pared", "Pared interior", "%d € por casilla" % int(RestaurantSim.WALL_PRICE), Icon.new("pared", "pared"), build.choose_inner.bind("pared"))
 			_add_card("t:puerta", "Puerta", "%d € · en una pared" % int(RestaurantSim.DOOR_PRICE), Icon.new("pared", "puerta"), build.choose_inner.bind("puerta"))
@@ -281,6 +282,11 @@ class Icon extends Control:
 						draw_rect(Rect2(c + Vector2(-20, -34), Vector2(6, 52)), brown)
 						draw_rect(Rect2(c + Vector2(14, -34), Vector2(6, 52)), brown)
 						draw_rect(Rect2(c + Vector2(-20, -34), Vector2(40, 6)), brown)
+					"equipar":
+						draw_rect(Rect2(c + Vector2(-50, -30), Vector2(100, 60)), wall, false, 6.0)
+						draw_circle(c + Vector2(-18, -4), 9.0, Color("8ec1ec"))
+						draw_rect(Rect2(c + Vector2(4, -12), Vector2(28, 16)), brown)
+						draw_rect(Rect2(c + Vector2(-34, 8), Vector2(26, 8)), Color("c98a96"))
 					"rodear":
 						draw_rect(Rect2(c + Vector2(-50, -32), Vector2(100, 64)), wall, false, 8.0)
 						draw_rect(Rect2(c + Vector2(-10, 24), Vector2(20, 12)), Color("f3e6d3"))
@@ -410,7 +416,16 @@ func _refresh() -> void:
 			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
 		BuildMode.Mode.HABITACION:
 			if text == "":
-				text = "Toca una esquina de la habitación." if build.room_type != "" else "Toca la habitación que quieras derribar."
+				if build.room_type == "__equipar":
+					text = "Toca una habitación para equiparla con lo básico."
+				elif build.room_type != "":
+					text = "Arrastra para dibujar la habitación (o toca dos esquinas)."
+				else:
+					text = "Toca la habitación que quieras derribar."
+			if build.room_type != "" and build.room_type != "__equipar":
+				_toggle("Paredes", build.room_walls, func(on: bool): build.set_room_option("paredes", on))
+				_toggle("Equipo", build.room_equip, func(on: bool): build.set_room_option("equipo", on))
+				_toggle("Suelo", build.room_floor, func(on: bool): build.set_room_option("suelo", on))
 			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
 		BuildMode.Mode.ELEGIDO:
 			if text == "":
@@ -424,6 +439,8 @@ func _refresh() -> void:
 			var value := build.sim.resale_value(build.uid)
 			_button("Vender" + ("" if value <= 0.0 else " · +%d €" % int(value)), RED, Color.WHITE, build.sell)
 			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
+	if build.can_undo():
+		_button("Deshacer", Color("eceff1"), INK, build.undo)
 	_message.text = text
 	_message.add_theme_color_override("font_color", color)
 	_actions.visible = text != "" or _buttons.get_child_count() > 0
@@ -445,6 +462,12 @@ func _is_chosen(key: String) -> bool:
 		var parts := key.split(":")
 		return build.mode == BuildMode.Mode.PARED and build.wall_part == parts[1] and build.wall_id == parts[2]
 	return false
+
+
+## Interruptor: se enciende y se apaga con cada toque.
+func _toggle(text: String, on: bool, action: Callable) -> void:
+	var b := _button(("✓ " if on else "") + text, BLUE if on else Color("eceff1"), Color.WHITE if on else INK, func(): action.call(not on))
+	b.custom_minimum_size = Vector2(150, 66)
 
 
 func _choice(text: String, on: bool, action: Callable) -> void:

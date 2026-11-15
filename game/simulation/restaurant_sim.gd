@@ -902,26 +902,109 @@ func fire(s: StaffMember) -> String:
 
 # --- Habitaciones -------------------------------------------------------------
 
-## Lo que cuesta crear una habitación en este rectángulo.
+## Lo que cuesta crear una habitación en este rectángulo (solo la obra de la zona).
 func room_cost(tipo: String, rect: Rect2i) -> float:
 	return float(layout.room_types.get(tipo, {}).get("precio_casilla", 0)) * rect.size.x * rect.size.y
 
 
-## Crea una habitación entre dos esquinas. "" si se hizo, o el motivo.
-func create_room(tipo: String, a: Vector2i, b: Vector2i) -> String:
+## Desglose de lo que costaría crear la habitación con estas opciones ({paredes, equipo,
+## suelo}): la zona, el suelo a juego, el equipo básico y las paredes con su puerta.
+func room_plan_cost(tipo: String, rect: Rect2i, options: Dictionary = {}) -> Dictionary:
+	var plan := { "zona": room_cost(tipo, rect), "suelo": 0.0, "equipo": 0.0, "paredes": 0.0 }
+	var def: Dictionary = layout.room_types.get(tipo, {})
+	if options.get("suelo", false):
+		var cells: Array = []
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				cells.append(Vector2i(x, y))
+		plan["suelo"] = floor_paint_cost(cells, def.get("suelo", ""))
+	if options.get("equipo", false):
+		var seen := {}
+		for item in layout.plan_equipment(tipo, rect):
+			var group: String = item.get("uno", "")
+			if group != "":
+				if seen.has(group):
+					continue
+				seen[group] = true
+			plan["equipo"] += furniture_price(item["tipo"])
+	if options.get("paredes", false):
+		var ring := layout.ring_around(rect)
+		var count: int = ring["celdas"].size()
+		if count > 0:
+			plan["paredes"] = (count - 1) * WALL_PRICE + DOOR_PRICE
+	plan["total"] = plan["zona"] + plan["suelo"] + plan["equipo"] + plan["paredes"]
+	return plan
+
+
+## Qué ha pasado de más al crear la última habitación (por ejemplo, que no cupieron las paredes).
+var last_room_note := ""
+
+
+## Crea una habitación entre dos esquinas, con lo que se pida: suelo a juego, equipo básico
+## y paredes con puerta. "" si se hizo, o el motivo.
+func create_room(tipo: String, a: Vector2i, b: Vector2i, options: Dictionary = {}) -> String:
+	last_room_note = ""
 	var rect := RestaurantLayout.rect_between(a, b)
 	var problem := layout.room_problem(tipo, rect)
 	if problem != "":
 		return problem
-	var cost := 0.0 if free_build else room_cost(tipo, rect)
-	if cost > finances.money:
-		return "No hay dinero suficiente (cuesta %d €)" % int(cost)
-	if cost > 0.0:
-		finances.spend("obras", cost)
-	layout.add_room(tipo, rect)
-	finishes_changed.emit()
-	layout_changed.emit()
+	var plan := room_plan_cost(tipo, rect, options)
+	if not free_build and plan["total"] > finances.money:
+		return "No hay dinero suficiente (cuesta %d €)" % int(plan["total"])
+	if not free_build and plan["zona"] > 0.0:
+		finances.spend("obras", plan["zona"])
+	var id := layout.add_room(tipo, rect)
+	var room := layout.room_at(rect.position)
+	var notes: Array[String] = []
+	if options.get("suelo", false):
+		var cells: Array = []
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				cells.append(Vector2i(x, y))
+		paint_floor(cells, layout.room_types[tipo].get("suelo", "vinilico"))
+	if options.get("equipo", false):
+		var left := _equip_room(room)
+		if left > 0:
+			notes.append("no cabe todo el equipo")
+	if options.get("paredes", false):
+		var walled := surround_rect(rect)
+		if walled != "":
+			notes.append("sin paredes: " + walled.to_lower())
+	last_room_note = "; ".join(notes)
+	if id >= 0:
+		finishes_changed.emit()
+		layout_changed.emit()
 	return ""
+
+
+## Pone el equipo básico que le falta a una habitación. Devuelve cuántas piezas no se
+## pudieron poner (sin sitio, sin dinero...).
+func _equip_room(room: Dictionary) -> int:
+	var missing := 0
+	var placed_groups := {}
+	for item in layout.plan_equipment(room["tipo"], room["rect"]):
+		var group: String = item.get("uno", "")
+		if group != "" and (placed_groups.has(group) or not layout.furniture_in(room, item["tipo"]).is_empty()):
+			continue
+		if group == "" and layout.furniture_at(item["celda"]).get("tipo", "") == item["tipo"]:
+			continue
+		if buy_furniture(item["tipo"], item["celda"], item["rot"]) == "":
+			if group != "":
+				placed_groups[group] = true
+		elif group == "":
+			missing += 1
+	return missing
+
+
+## Equipa una habitación que ya existe con lo básico. "" si se hizo, o el motivo.
+func equip_room_at(cell: Vector2i) -> String:
+	var room := layout.room_at(cell)
+	if room.is_empty():
+		return "Toca dentro de una habitación"
+	if layout.room_ready(room) and not layout.plan_equipment(room["tipo"], room["rect"]).any(func(i): return layout.furniture_at(i["celda"]).is_empty() and not i.has("uno")):
+		return "Ya tiene todo lo básico"
+	var missing := _equip_room(room)
+	return "No cabe todo: faltan %d piezas" % missing if missing > 0 else ""
 
 
 ## Derriba la habitación que contiene esta casilla. "" si se hizo, o el motivo.
@@ -990,7 +1073,11 @@ func surround_room(cell: Vector2i) -> String:
 	var room := layout.room_at(cell)
 	if room.is_empty():
 		return "Toca dentro de una habitación"
-	var ring := layout.ring_around(room["rect"])
+	return surround_rect(room["rect"])
+
+
+func surround_rect(rect: Rect2i) -> String:
+	var ring := layout.ring_around(rect)
 	var cells: Array = ring["celdas"]
 	if cells.is_empty():
 		return "Ya está rodeada"
@@ -1016,6 +1103,37 @@ func surround_room(cell: Vector2i) -> String:
 	_after_layout_change()
 	finishes_changed.emit()
 	return ""
+
+
+# --- Deshacer ----------------------------------------------------------------------------
+
+## Foto del estado reformable del local (muebles, habitaciones, paredes, suelos y caja).
+func snapshot() -> Dictionary:
+	return {
+		"money": finances.money, "income": finances.income.duplicate(), "expenses": finances.expenses.duplicate(),
+		"rooms": layout.rooms.duplicate(true), "inner": layout.inner_walls.duplicate(),
+		"furniture": layout.furniture.duplicate(true), "floors": layout.floors.duplicate(),
+		"walls": layout.walls.duplicate(true), "bought": _bought_this_session.duplicate(),
+		"next_uid": layout._next_uid, "next_room": layout._next_room_id,
+	}
+
+
+## Vuelve a como estaba el local en la foto (y devuelve el dinero gastado desde entonces).
+func restore(snap: Dictionary) -> void:
+	finances.money = snap["money"]
+	finances.income = snap["income"].duplicate()
+	finances.expenses = snap["expenses"].duplicate()
+	layout.rooms.assign(snap["rooms"].duplicate(true))
+	layout.inner_walls = snap["inner"].duplicate()
+	layout.furniture.assign(snap["furniture"].duplicate(true))
+	layout.floors = snap["floors"].duplicate()
+	layout.walls = snap["walls"].duplicate(true)
+	_bought_this_session = snap["bought"].duplicate()
+	layout._next_uid = snap["next_uid"]
+	layout._next_room_id = snap["next_room"]
+	layout._rebuild()
+	_after_layout_change()
+	finishes_changed.emit()
 
 
 ## Casillas donde hay alguien parado o yendo (para no mandar a dos al mismo sitio).

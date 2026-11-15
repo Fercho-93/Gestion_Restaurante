@@ -42,6 +42,7 @@ func _initialize() -> void:
 	test_bar_needs()
 	test_inner_walls()
 	test_bathroom_capacity_and_cleaning()
+	test_room_tools()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1456,3 +1457,51 @@ func test_bathroom_capacity_and_cleaning() -> void:
 	probe.wc_dirt[probe.layout.rooms_of("aseos")[0]["id"]] = 6
 	check(probe.cleanliness() < clean_before, "unos baños sucios bajan la limpieza")
 	print("Baños: máximo a la vez %d, suciedad máxima %d, hubo espera: %s" % [most, max_dirt, str(waited)])
+
+
+func test_room_tools() -> void:
+	var data = load("res://simulation/game_data.gd").new()
+	data.load_all()
+	var sim := RestaurantSim.new(data.sim_data("universitario", "amplio"), 11 * 60, 4)
+	data.free()
+	var layout := sim.layout
+	var all := { "paredes": true, "equipo": true, "suelo": true }
+	# Una habitación de un solo gesto: zona, suelo a juego, equipo básico y paredes con puerta.
+	var rect := RestaurantLayout.rect_between(Vector2i(0, 0), Vector2i(2, 2))
+	var plan := sim.room_plan_cost("aseos", rect, all)
+	check(plan["zona"] > 0.0 and plan["suelo"] > 0.0 and plan["equipo"] > 0.0 and plan["paredes"] > 0.0, "el presupuesto desglosa zona, suelo, equipo y paredes")
+	var snap := sim.snapshot()
+	var money := sim.finances.money
+	check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(2, 2), all) == "", "se crean unos baños con todo (%s)" % sim.last_room_note)
+	var room := layout.room_at(Vector2i(1, 1))
+	check(layout.room_ready(room), "salen equipados con inodoro y lavabo")
+	check(layout.stall_cells(room).size() >= 1, "con al menos un puesto")
+	check(layout.floors[Vector2i(1, 1)] == "gres", "con el suelo a juego")
+	check(layout.inner_walls.values().count("puerta") == 1 and layout.inner_walls.values().count("pared") >= 4, "rodeados de paredes con una puerta")
+	check(layout.accessibility_problem() == "", "y se llega a ellos")
+	check(absf((money - sim.finances.money) - plan["total"]) < 1.0, "se cobra lo que decía el presupuesto (%d)" % int(plan["total"]))
+	# Deshacer devuelve todo: habitación, muebles, suelo, paredes y dinero.
+	sim.restore(snap)
+	check(layout.rooms_of("aseos").is_empty() and layout.inner_walls.is_empty() and layout.furniture.size() == snap["furniture"].size(), "deshacer quita la habitación, las paredes y el equipo")
+	check(is_equal_approx(sim.finances.money, money) and layout.floors[Vector2i(1, 1)] == "vinilico", "y devuelve el dinero y el suelo")
+	check(layout.accessibility_problem() == "", "el local queda bien")
+	# Sin dinero suficiente no se hace nada.
+	sim.finances.money = 100.0
+	check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(2, 2), all).begins_with("No hay dinero"), "sin dinero no se crea")
+	check(layout.rooms_of("aseos").is_empty() and is_equal_approx(sim.finances.money, 100.0), "ni se cobra nada")
+	sim.finances.money = 50000.0
+	# Cada tipo se equipa solo, según su forma.
+	check(sim.create_room("ropero", Vector2i(0, 5), Vector2i(0, 6), { "equipo": true }) == "", "ropero equipado")
+	check(layout.room_ready(layout.rooms_of("ropero")[0]), "con su perchero")
+	check(sim.create_room("barra", Vector2i(3, 1), Vector2i(7, 3), { "equipo": true }) == "", "barra equipada")
+	var bar := layout.rooms_of("barra")[0]
+	check(layout.room_ready(bar) and layout.bar_stools().size() >= 3 and not layout.bar_posts().is_empty(), "con mostrador, taburetes y sitio para el camarero")
+	check(sim.create_room("despacho", Vector2i(0, 8), Vector2i(1, 9), { "equipo": true }) == "", "otro despacho equipado")
+	check(layout.furniture_in(layout.room_at(Vector2i(0, 8)), "ordenador").size() == 1, "con un solo ordenador")
+	# Equipar una habitación que ya existe, y que lo que sobra no se repite.
+	check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(2, 2), {}) == "", "baños vacíos")
+	check(not layout.room_ready(layout.rooms_of("aseos")[0]), "sin equipar no funcionan")
+	check(sim.equip_room_at(Vector2i(1, 1)) == "", "se equipan después")
+	check(layout.room_ready(layout.rooms_of("aseos")[0]), "ya funcionan")
+	check(sim.equip_room_at(Vector2i(1, 1)) != "", "no se repite lo ya puesto")
+	check(layout.accessibility_problem() == "", "todo sigue accesible")

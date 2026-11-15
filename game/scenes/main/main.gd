@@ -9,6 +9,10 @@ extends Node3D
 var _taps := TapDetector.new()
 var build := BuildMode.new()
 var _day := -1.0
+var _fingers := {}
+var _drawing := false
+var _draw_finger := -1
+var _draw_start := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -55,6 +59,44 @@ func _input(event: InputEvent) -> void:
 	var tap = _taps.feed(event, camera.tap_slop())
 	if tap != null:
 		_on_tap(tap)
+	_drag_to_draw(event)
+
+
+## Con una herramienta de dibujo (habitaciones, paredes), un dedo que arrastra dibuja un
+## rectángulo o una línea con vista previa, como en los Sims; con dos dedos se mueve la
+## cámara. Un toque suelto sigue funcionando (primer y segundo extremo).
+func _drag_to_draw(event: InputEvent) -> void:
+	if not build.active or not build.is_drag_tool():
+		if _drawing:
+			build.drag_cancel()
+			_drawing = false
+		_fingers.clear()
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_fingers[event.index] = event.position
+			if _fingers.size() == 1:
+				_draw_start = event.position
+				_draw_finger = event.index if not hud.blocks_point(event.position) else -1
+			elif _drawing:
+				build.drag_cancel()
+				_drawing = false
+				_draw_finger = -1
+		else:
+			_fingers.erase(event.index)
+			if event.index == _draw_finger:
+				if _drawing:
+					build.drag_end(event.position)
+					get_viewport().set_input_as_handled()
+				_drawing = false
+				_draw_finger = -1
+	elif event is InputEventScreenDrag and event.index == _draw_finger and _fingers.size() == 1:
+		if not _drawing and event.position.distance_to(_draw_start) >= camera.tap_slop():
+			_drawing = true
+			build.drag_begin(_draw_start)
+		if _drawing:
+			build.drag_update(event.position)
+			get_viewport().set_input_as_handled()
 
 
 ## Un toque en el mundo: el ordenador se usa, las personas se consultan y el suelo es

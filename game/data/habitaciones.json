@@ -10,7 +10,9 @@
 			"lavabo"
 		],
 		"dentro_de": "unos baños",
-		"descripcion": "Los clientes los usan mientras comen. Necesitan inodoro y lavabo; sin baños la gente se queja."
+		"descripcion": "Los clientes los usan mientras comen. Necesitan inodoro y lavabo; sin baños la gente se queja.",
+		"suelo": "gres",
+		"creada": "creados"
 	},
 	{
 		"id": "ropero",
@@ -22,7 +24,9 @@
 			"perchero"
 		],
 		"dentro_de": "un ropero",
-		"descripcion": "Los clientes dejan aquí el abrigo al llegar y se sienten mejor atendidos."
+		"descripcion": "Los clientes dejan aquí el abrigo al llegar y se sienten mejor atendidos.",
+		"suelo": "tarima",
+		"creada": "creado"
 	},
 	{
 		"id": "barra",
@@ -35,7 +39,9 @@
 			"taburete"
 		],
 		"dentro_de": "una barra de bar",
-		"descripcion": "Los que esperan mesa se sientan en la barra a tomar algo: aguantan más y dejan dinero."
+		"descripcion": "Los que esperan mesa se sientan en la barra a tomar algo: aguantan más y dejan dinero.",
+		"suelo": "madera_natural",
+		"creada": "creada"
 	},
 	{
 		"id": "despacho",
@@ -47,6 +53,8 @@
 			"ordenador"
 		],
 		"dentro_de": "un despacho",
-		"descripcion": "Desde su ordenador gestionas el restaurante. Sin despacho no hay gestión."
+		"descripcion": "Desde su ordenador gestionas el restaurante. Sin despacho no hay gestión.",
+		"suelo": "oficina",
+		"creada": "creado"
 	}
 ]

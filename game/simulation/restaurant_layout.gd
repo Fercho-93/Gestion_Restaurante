@@ -906,3 +906,45 @@ func ring_around(rect: Rect2i) -> Dictionary:
 				best = d
 				door = c
 	return { "celdas": cells, "puerta": door }
+
+
+## Equipo básico para una habitación de este tipo y tamaño, colocado como se haría a mano:
+## los inodoros y lavabos contra una pared mirando hacia dentro, la barra con el mostrador,
+## el sitio del camarero y los taburetes en fila... Lista de {tipo, celda, rot}; con "uno"
+## solo hace falta que se pueda poner el primero de los que lleven la misma etiqueta.
+func plan_equipment(tipo: String, rect: Rect2i) -> Array[Dictionary]:
+	var items: Array[Dictionary] = []
+	var x0 := rect.position.x
+	var y0 := rect.position.y
+	var w := rect.size.x
+	var h := rect.size.y
+	match tipo:
+		"aseos":
+			if w == 1:
+				# Pasillo estrecho: el inodoro y el lavabo uno tras otro.
+				items.append({ "tipo": "inodoro", "celda": Vector2i(x0, y0), "rot": 0 })
+				items.append({ "tipo": "lavabo", "celda": Vector2i(x0, y0 + 2), "rot": 0 })
+			else:
+				var stalls := clampi(w - 1, 1, 3)
+				for i in stalls:
+					items.append({ "tipo": "inodoro", "celda": Vector2i(x0 + i, y0), "rot": 0 })
+				for i in range(stalls, mini(w, stalls + 2)):
+					items.append({ "tipo": "lavabo", "celda": Vector2i(x0 + i, y0), "rot": 0 })
+		"ropero":
+			items.append({ "tipo": "perchero", "celda": Vector2i(x0, y0), "rot": 0 })
+			if w * h >= 6:
+				items.append({ "tipo": "perchero", "celda": Vector2i(x0 + w - 1, y0), "rot": 0 })
+		"barra":
+			var counters := w if h >= 3 else maxi(1, w - 1)
+			for i in counters:
+				items.append({ "tipo": "barra_bar", "celda": Vector2i(x0 + i, y0), "rot": 0 })
+			var stools_row := y0 + h - 1 if h >= 2 else y0
+			for i in mini(counters, 4):
+				if stools_row != y0:
+					items.append({ "tipo": "taburete", "celda": Vector2i(x0 + i, stools_row), "rot": 0 })
+		"despacho":
+			for y in range(y0, y0 + h):
+				for x in range(x0, x0 + w):
+					for rot in 4:
+						items.append({ "tipo": "ordenador", "celda": Vector2i(x, y), "rot": rot, "uno": "ordenador" })
+	return items

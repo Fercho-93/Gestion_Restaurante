@@ -31,6 +31,20 @@ var wall_scope := "tramo"
 ## Paredes interiores: herramienta ("pared", "puerta", "quitar" o "rodear") y primer extremo.
 var inner_tool := ""
 var inner_corner := Vector2i(-999, -999)
+## Al crear una habitación: con paredes y puerta, con el equipo básico y con suelo a juego.
+var room_walls := true
+var room_equip := true
+var room_floor := true
+## Dibujo arrastrando (como en los Sims): de dónde a dónde, y qué se ve mientras tanto.
+var drag_from := Vector2i(-999, -999)
+var drag_to := Vector2i(-999, -999)
+var dragging := false
+var _preview_cells: Array[Vector2i] = []
+var _preview_ring: Array[Vector2i] = []
+var _preview_ok := false
+## Fotos para deshacer (la última es el estado anterior a la última reforma).
+var _undo: Array[Dictionary] = []
+const MAX_UNDO := 25
 var room_type := ""
 var room_corner := Vector2i(-999, -999)
 ## Mueble del catálogo que se está colocando (nuevo o movido).
@@ -72,6 +86,7 @@ func enter() -> void:
 	sim.begin_build_session()
 	sim.stop_manager()
 	_area.visible = true
+	_undo.clear()
 	message = "Elige un mueble abajo o toca uno del local para moverlo o venderlo."
 	_set_mode(Mode.NADA)
 
@@ -124,7 +139,9 @@ func choose_room(tipo: String) -> void:
 	room_type = tipo
 	room_corner = Vector2i(-999, -999)
 	message = ""
-	if tipo != "":
+	if tipo == "__equipar":
+		message = "Toca una habitación para equiparla con lo básico que le falte."
+	elif tipo != "":
 		var def: Dictionary = sim.layout.room_types[tipo]
 		var needs: Array[String] = []
 		for n in def["necesita"]:
@@ -147,6 +164,169 @@ func choose_inner(tool: String) -> void:
 		"rodear":
 			message = "Toca dentro de una habitación para rodearla con paredes y una puerta."
 	_set_mode(Mode.TABIQUE)
+
+
+## Guarda cómo está el local antes de una reforma, para poder deshacerla.
+func _checkpoint() -> Dictionary:
+	return sim.snapshot()
+
+
+func _commit(snap: Dictionary) -> void:
+	_undo.append(snap)
+	if _undo.size() > MAX_UNDO:
+		_undo.pop_front()
+
+
+func can_undo() -> bool:
+	return not _undo.is_empty()
+
+
+## Deshace la última reforma (y devuelve lo que costó).
+func undo() -> void:
+	if _undo.is_empty():
+		return
+	sim.restore(_undo.pop_back())
+	message = "Deshecho."
+	_set_mode(Mode.NADA if mode == Mode.ELEGIDO else mode)
+
+
+func set_room_option(option: String, on: bool) -> void:
+	match option:
+		"paredes":
+			room_walls = on
+		"equipo":
+			room_equip = on
+		"suelo":
+			room_floor = on
+	if dragging:
+		_update_preview()
+	_refresh()
+
+
+func _room_options() -> Dictionary:
+	return { "paredes": room_walls, "equipo": room_equip, "suelo": room_floor }
+
+
+## ¿Se dibuja arrastrando con la herramienta actual?
+func is_drag_tool() -> bool:
+	return active and ((mode == Mode.HABITACION and room_type != "" and room_type != "__equipar") or (mode == Mode.TABIQUE and inner_tool == "pared"))
+
+
+func _cell_at(screen_pos: Vector2) -> Vector2i:
+	var ground := camera.screen_to_ground(screen_pos)
+	return Vector2i(roundi(ground.x), roundi(ground.z))
+
+
+func drag_begin(screen_pos: Vector2) -> void:
+	if not is_drag_tool():
+		return
+	dragging = true
+	drag_from = _cell_at(screen_pos)
+	drag_to = drag_from
+	room_corner = Vector2i(-999, -999)
+	inner_corner = Vector2i(-999, -999)
+	_update_preview()
+	_refresh()
+
+
+func drag_update(screen_pos: Vector2) -> void:
+	if not dragging:
+		return
+	var c := _cell_at(screen_pos)
+	if c == drag_to:
+		return
+	drag_to = c
+	_update_preview()
+	_refresh()
+
+
+func drag_cancel() -> void:
+	if not dragging:
+		return
+	dragging = false
+	message = ""
+	_refresh()
+
+
+## Suelta: si la vista previa estaba en verde, se construye.
+func drag_end(screen_pos: Vector2) -> void:
+	if not dragging:
+		return
+	drag_to = _cell_at(screen_pos)
+	_update_preview()
+	dragging = false
+	if mode == Mode.HABITACION:
+		_make_room(drag_from, drag_to)
+	else:
+		_make_wall(drag_from, drag_to)
+	_refresh()
+
+
+## Calcula qué se vería: las casillas y si se puede, con el precio.
+func _update_preview() -> void:
+	_preview_cells.clear()
+	_preview_ring.clear()
+	if mode == Mode.HABITACION:
+		var rect := RestaurantLayout.rect_between(drag_from, drag_to)
+		for x in range(rect.position.x, rect.end.x):
+			for y in range(rect.position.y, rect.end.y):
+				_preview_cells.append(Vector2i(x, y))
+		var def: Dictionary = sim.layout.room_types[room_type]
+		var problem := sim.layout.room_problem(room_type, rect)
+		var plan := sim.room_plan_cost(room_type, rect, _room_options())
+		if room_walls:
+			_preview_ring.assign(sim.layout.ring_around(rect)["celdas"])
+		var total: float = 0.0 if sim.free_build else plan["total"]
+		if problem == "" and total > sim.finances.money:
+			problem = "No hay dinero suficiente"
+		_preview_ok = problem == ""
+		var head := "%s %d×%d" % [def["nombre"], rect.size.x, rect.size.y]
+		message = "%s · %d €" % [head, int(total)] if problem == "" else "%s: %s" % [head, problem]
+	else:
+		var line := RestaurantLayout.line_between(drag_from, drag_to)
+		_preview_cells.assign(line)
+		var problem := sim.layout.inner_wall_problem(line, "pared", sim.people_cells())
+		var cost := 0.0 if sim.free_build else sim.inner_cost(line, "pared")
+		if problem == "" and cost > sim.finances.money:
+			problem = "No hay dinero suficiente"
+		_preview_ok = problem == ""
+		message = "Pared de %d casillas · %d €" % [line.size(), int(cost)] if problem == "" else "Pared: " + problem
+
+
+func _make_room(a: Vector2i, b: Vector2i) -> void:
+	var snap := _checkpoint()
+	var rect := RestaurantLayout.rect_between(a, b)
+	var plan := sim.room_plan_cost(room_type, rect, _room_options())
+	var result := sim.create_room(room_type, a, b, _room_options())
+	if result == "":
+		_commit(snap)
+		var def: Dictionary = sim.layout.room_types[room_type]
+		var parts: Array[String] = []
+		if room_equip:
+			parts.append("con su equipo")
+		if room_walls and not sim.last_room_note.contains("sin paredes"):
+			parts.append("con paredes y puerta")
+		message = "%s %s%s%s." % [def["nombre"], def.get("creada", "creada"), "" if parts.is_empty() else " (" + ", ".join(parts) + ")", "" if sim.free_build else " · −%d €" % int(plan["total"])]
+		if sim.last_room_note != "":
+			message += " Ojo: " + sim.last_room_note + "."
+		elif not room_equip:
+			message += " Ahora pon su equipo."
+	else:
+		message = result
+	room_corner = Vector2i(-999, -999)
+
+
+func _make_wall(a: Vector2i, b: Vector2i) -> void:
+	var snap := _checkpoint()
+	var line := RestaurantLayout.line_between(a, b)
+	var cost := sim.inner_cost(line, "pared")
+	var result := sim.build_inner(line, "pared")
+	if result == "":
+		_commit(snap)
+		message = "Pared de %d casillas%s." % [line.size(), "" if sim.free_build else " (−%d €)" % int(cost)]
+	else:
+		message = result
+	inner_corner = Vector2i(-999, -999)
 
 
 func set_wall_scope(scope: String) -> void:
@@ -207,20 +387,25 @@ func _tap_inner(screen_pos: Vector2) -> void:
 				message = "Toca dónde acaba la pared."
 				_refresh()
 				return
-			var line := RestaurantLayout.line_between(inner_corner, c)
-			var cost := sim.inner_cost(line, "pared")
-			result = sim.build_inner(line, "pared")
-			inner_corner = Vector2i(-999, -999)
-			message = "Pared de %d casillas%s." % [line.size(), "" if sim.free_build else " (−%d €)" % int(cost)] if result == "" else result
+			_make_wall(inner_corner, c)
 		"puerta":
+			var snap := _checkpoint()
 			result = sim.build_inner([c], "puerta")
 			message = "Puerta abierta." if result == "" else result
+			if result == "":
+				_commit(snap)
 		"quitar":
+			var snap2 := _checkpoint()
 			result = sim.demolish_inner([c])
 			message = "Derribado." if result == "" else result
+			if result == "":
+				_commit(snap2)
 		"rodear":
+			var snap3 := _checkpoint()
 			result = sim.surround_room(c)
 			message = "Habitación rodeada con una puerta." if result == "" else result
+			if result == "":
+				_commit(snap3)
 	_refresh()
 
 
@@ -229,24 +414,27 @@ func _tap_room(screen_pos: Vector2) -> void:
 	var ground := camera.screen_to_ground(screen_pos)
 	var c := Vector2i(roundi(ground.x), roundi(ground.z))
 	if room_type == "":
+		var snap := _checkpoint()
 		var result := sim.remove_room_at(c)
 		message = "Habitación derribada." if result == "" else result
+		if result == "":
+			_commit(snap)
+		_refresh()
+		return
+	if room_type == "__equipar":
+		var snap2 := _checkpoint()
+		var result2 := sim.equip_room_at(c)
+		message = "Equipada con lo básico." if result2 == "" else result2
+		if result2 == "":
+			_commit(snap2)
 		_refresh()
 		return
 	if room_corner == Vector2i(-999, -999):
 		room_corner = c
-		message = "Toca la esquina de enfrente para cerrar la habitación."
+		message = "Toca la esquina de enfrente para cerrar la habitación (o arrastra)."
 		_refresh()
 		return
-	var cost := sim.room_cost(room_type, RestaurantLayout.rect_between(room_corner, c))
-	var result := sim.create_room(room_type, room_corner, c)
-	if result == "":
-		var def: Dictionary = sim.layout.room_types[room_type]
-		message = "%s creada%s. Ahora pon su equipo (pestaña Habitaciones)." % [def["nombre"], "" if sim.free_build else " (−%d €)" % int(cost)]
-		room_corner = Vector2i(-999, -999)
-	else:
-		message = result
-		room_corner = Vector2i(-999, -999)
+	_make_room(room_corner, c)
 	_refresh()
 
 
@@ -271,10 +459,12 @@ func _tap_floor(screen_pos: Vector2) -> void:
 		message = "Ahí no se puede pintar el suelo."
 		_refresh()
 		return
+	var snap := _checkpoint()
 	var result := sim.paint_floor(cells, floor_material)
 	if result["problema"] != "":
 		message = result["problema"]
 	else:
+		_commit(snap)
 		var cost: float = result["coste"]
 		message = "Pintado: %d casillas%s." % [result["casillas"], "" if cost <= 0.0 else " (−%d €)" % int(cost)]
 	_refresh()
@@ -292,6 +482,7 @@ func _tap_wall(screen_pos: Vector2) -> void:
 	var done := 0
 	var spent := 0.0
 	var first_problem := ""
+	var wall_snap := _checkpoint()
 	for k in keys:
 		var price := 0.0 if sim.free_build else sim.wall_part_price(wall_part, wall_id)
 		var problem := sim.change_wall(k, wall_part, wall_id)
@@ -303,6 +494,7 @@ func _tap_wall(screen_pos: Vector2) -> void:
 	if done == 0:
 		message = first_problem if first_problem != "" else "Ahí no se puede."
 	else:
+		_commit(wall_snap)
 		message = "Hecho en %d tramo%s%s." % [done, "" if done == 1 else "s", "" if spent <= 0.0 else " (−%d €)" % int(spent)]
 	if finishes != null:
 		finishes.highlight_wall(key)
@@ -329,15 +521,19 @@ func confirm() -> void:
 		return
 	if uid == -1:
 		var price := 0.0 if sim.free_build else sim.furniture_price(tipo)
+		var snap := _checkpoint()
 		var result := sim.buy_furniture(tipo, cell, rot)
 		if result == "":
+			_commit(snap)
 			message = "Comprado: %s%s. Toca otro sitio para poner otro igual." % [_name(tipo), "" if price == 0.0 else " (%d €)" % int(price)]
 		else:
 			message = result
 		_refresh()
 	else:
+		var snap2 := _checkpoint()
 		var result := sim.move_furniture(uid, cell, rot)
 		if result == "":
+			_commit(snap2)
 			message = "Movido."
 			_set_mode(Mode.ELEGIDO)
 		else:
@@ -361,8 +557,10 @@ func sell() -> void:
 	if mode != Mode.ELEGIDO:
 		return
 	var value := sim.resale_value(uid)
+	var snap := _checkpoint()
 	var result := sim.sell_furniture(uid)
 	if result == "":
+		_commit(snap)
 		message = "Vendido: %s%s." % [_name(tipo), "" if value == 0.0 else " (+%d €)" % int(value)]
 		_set_mode(Mode.NADA)
 	else:
@@ -413,11 +611,15 @@ func _refresh() -> void:
 		_ghost.position = Vector3(cell.x, 0.02, cell.y)
 		add_child(_ghost)
 		_draw_footprint(OK_COLOR if problem == "" else BAD_COLOR)
-	elif mode == Mode.TABIQUE:
-		if inner_corner != Vector2i(-999, -999):
+	elif mode == Mode.TABIQUE or mode == Mode.HABITACION:
+		if dragging:
+			for c in _preview_cells:
+				_tiles.add_child(_tile(c, OK_COLOR if _preview_ok else BAD_COLOR, 0.02))
+			for c in _preview_ring:
+				_tiles.add_child(_tile(c, Color(0.45, 0.65, 0.95, 0.5), 0.02))
+		elif mode == Mode.TABIQUE and inner_corner != Vector2i(-999, -999):
 			_tiles.add_child(_tile(inner_corner, PICK_COLOR, 0.02))
-	elif mode == Mode.HABITACION:
-		if room_corner != Vector2i(-999, -999):
+		elif mode == Mode.HABITACION and room_corner != Vector2i(-999, -999):
 			_tiles.add_child(_tile(room_corner, PICK_COLOR, 0.02))
 	elif mode == Mode.ELEGIDO:
 		var f := sim.layout.furniture_by_uid(uid)
