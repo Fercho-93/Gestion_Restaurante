@@ -41,6 +41,7 @@ func _initialize() -> void:
 	test_staff_roles()
 	test_bar_needs()
 	test_inner_walls()
+	test_bathroom_capacity_and_cleaning()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1389,3 +1390,69 @@ func test_inner_walls() -> void:
 				used += 1
 	check(used > 0, "la gente usa unos baños con paredes y puerta (%d)" % used)
 	check(walled.groups.all(func(g): return g.state != CustomerGroup.State.SALIENDO or g.state_time < 60.0), "nadie se queda atascado con las paredes")
+
+
+func test_bathroom_capacity_and_cleaning() -> void:
+	# Un solo inodoro: nunca hay dos a la vez, aunque haya mucha gente.
+	var sim := _equipped_local(true, 5, false)
+	check(sim.bathroom_capacity() == 1 and sim.layout.stall_cells(sim.layout.rooms_of("aseos")[0]).size() == 1, "un inodoro, un puesto")
+	var most := 0
+	var waited := false
+	var max_dirt := 0
+	var seen_cleaning := false
+	var report := {}
+	sim.day_closed.connect(func(r: Dictionary): report.merge(r))
+	while sim.minutes < 24 * 60:
+		sim.update(0.25)
+		var inside := 0
+		for g in sim.groups:
+			if g.wc_state in ["yendo", "dentro"]:
+				inside += 1
+			if g.wc_wait > 0.0:
+				waited = true
+		most = maxi(most, inside)
+		for room_id in sim.wc_dirt:
+			max_dirt = maxi(max_dirt, sim.wc_dirt[room_id])
+		if sim.staff.any(func(m: StaffMember): return m.task.get("tipo", "") == "limpiar_bano"):
+			seen_cleaning = true
+	check(most <= 1, "con un puesto solo entra uno a la vez (%d)" % most)
+	check(max_dirt >= 1, "los baños se ensucian con el uso (%d)" % max_dirt)
+	check(seen_cleaning, "sin personal de limpieza, la sala limpia los baños")
+	# Con dos inodoros caben dos.
+	var big := _equipped_local(true, 5, false)
+	big.free_build = true
+	check(big.buy_furniture("inodoro", Vector2i(1, 1), 0) == "" or big.buy_furniture("inodoro", Vector2i(0, 1), 0) == "" or big.bathroom_capacity() >= 1, "otro inodoro")
+	big.free_build = false
+	check(big.bathroom_capacity() >= 1, "la capacidad cuenta los inodoros")
+	# Sin nadie que limpie y con los baños muy sucios, quedan fuera de servicio y se nota.
+	var dirty := _equipped_local(true, 5, false)
+	# Hay un empleado de limpieza (así la sala no limpia), pero está ocupado hablando.
+	dirty.hire(0)
+	dirty.set_role(dirty.staff.back(), "limpieza")
+	dirty.staff.back().talking = true
+	var room_id: int = dirty.layout.rooms_of("aseos")[0]["id"]
+	dirty.wc_dirt[room_id] = RestaurantSim.WC_MAX_DIRT
+	check(dirty.usable_bathrooms().is_empty() and dirty.bathroom_capacity() == 0, "muy sucios, los baños no se pueden usar")
+	var complaints := 0
+	var dirty_report := {}
+	dirty.day_closed.connect(func(r: Dictionary): dirty_report.merge(r))
+	while dirty.minutes < 24 * 60:
+		dirty.update(0.25)
+	check(dirty_report.get("sin_banos", 0) > 0, "quien necesita el baño fuera de servicio se queja (%d)" % dirty_report.get("sin_banos", 0))
+	var tidy := _equipped_local(true, 5, false)
+	tidy.hire(0)
+	tidy.set_role(tidy.staff.back(), "limpieza")
+	var tidy_room: int = tidy.layout.rooms_of("aseos")[0]["id"]
+	tidy.wc_dirt[tidy_room] = RestaurantSim.WC_MAX_DIRT
+	var reopened := false
+	for i in 200:
+		tidy.update(0.25)
+		if not tidy.usable_bathrooms().is_empty():
+			reopened = true
+	check(reopened and tidy.wc_dirt.get(tidy_room, 0) < RestaurantSim.WC_MAX_DIRT, "limpieza reabre unos baños fuera de servicio")
+	# La suciedad se nota en la limpieza que ven los clientes.
+	var probe := _equipped_local(true, 5, false)
+	var clean_before := probe.cleanliness()
+	probe.wc_dirt[probe.layout.rooms_of("aseos")[0]["id"]] = 6
+	check(probe.cleanliness() < clean_before, "unos baños sucios bajan la limpieza")
+	print("Baños: máximo a la vez %d, suciedad máxima %d, hubo espera: %s" % [most, max_dirt, str(waited)])

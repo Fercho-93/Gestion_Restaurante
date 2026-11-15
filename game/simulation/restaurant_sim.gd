@@ -13,6 +13,8 @@ signal manager_started_talking(target: Dictionary)
 signal announcement(text: String, cell: Vector2i)
 ## Se han comprado, movido o vendido muebles.
 signal layout_changed
+## Cambia el estado de una habitación (por ejemplo, unos baños se ensucian o se limpian).
+signal rooms_changed
 ## Cambian los suelos o las paredes (solo hay que redibujar el escenario).
 signal finishes_changed
 
@@ -27,8 +29,8 @@ const CANDIDATE_NAMES := ["Carmen", "Javier", "Rocío", "Álvaro", "Nuria", "Hug
 const CANDIDATES_PER_DAY := 3
 ## Tareas de sala que se reparten entre el personal y su prioridad (menos = antes).
 const WAITER_PRIORITY := { "servir": 0, "cobrar": 1, "acomodar": 2, "pedido": 3,
-	"recoger_mesa": 4, "fregar": 5, "barra": 2, "limpiar_barra": 6 }
-const CLEANING_TASKS := ["recoger_mesa", "fregar", "limpiar_barra"]
+	"recoger_mesa": 4, "fregar": 5, "barra": 2, "limpiar_barra": 6, "limpiar_bano": 5.5 }
+const CLEANING_TASKS := ["recoger_mesa", "fregar", "limpiar_barra", "limpiar_bano"]
 ## Manchas en el suelo como mucho (y cuánto restan a la limpieza cada una).
 const MAX_STAINS := 12
 const REGULAR_NAMES := ["Don Ramón", "Doña Encarna", "Pepe el del quiosco", "Sofía", "Tomás", "Luisa"]
@@ -52,6 +54,12 @@ const BAR_SERVE_TIME := 1.0
 const BAR_CLEAN_TIME := 1.5
 const BAR_CLEAN_AT := 6
 const BAR_MAX_DIRT := 12
+## Baños: cada uso los ensucia; sucios se limpian y, del todo, quedan fuera de servicio.
+const WC_CLEAN_AT := 4
+const WC_MAX_DIRT := 8
+const WC_CLEAN_TIME := 2.0
+## Minutos esperando un puesto libre en los baños antes de enfadarse.
+const WC_PATIENCE := 8.0
 const COAT_TIME := 0.5
 const WC_MIN_TIME := 1.2
 const WC_MAX_TIME := 2.4
@@ -81,6 +89,9 @@ var candidates: Array[Dictionary] = []
 ## Suciedad de la barra (sube con cada copa servida) y quién la está limpiando.
 var bar_dirty := 0
 var bar_cleaner = null
+## Suciedad de cada baño (id de la habitación -> usos desde la última limpieza) y quién lo limpia.
+var wc_dirt: Dictionary = {}
+var wc_cleaning: Dictionary = {}
 var _warned_no_drinks := false
 var _next_staff_id := 100
 var _hiring_rng := RandomNumberGenerator.new()
@@ -740,7 +751,7 @@ func _allowed_for(w) -> Array:
 		if not _has_role("acomodador"):
 			tasks.append("acomodar")
 		if not _has_role("limpieza"):
-			tasks.append_array(["recoger_mesa", "fregar"])
+			tasks.append_array(["recoger_mesa", "fregar", "limpiar_bano"])
 	if tasks.is_empty():
 		tasks = ["__ninguna__"]
 	return tasks
@@ -1100,8 +1111,45 @@ func _update_coat(g: CustomerGroup, dt: float) -> void:
 				g.mood_bonus += 0.05
 
 
-## Uno del grupo necesita ir al baño mientras esperan o comen: va, tarda un rato y vuelve.
-## Sin baños (o sin equipar) se queja, y eso cuenta en la valoración.
+## Baños que se pueden usar: funcionan (tienen inodoro y lavabo) y no están hechos un asco.
+func usable_bathrooms() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for room in layout.rooms_of("aseos"):
+		if layout.room_ready(room) and wc_dirt.get(room["id"], 0) < WC_MAX_DIRT:
+			out.append(room)
+	return out
+
+
+## Cuántos pueden estar a la vez en los baños (un puesto por inodoro).
+func bathroom_capacity() -> int:
+	var n := 0
+	for room in usable_bathrooms():
+		n += layout.stall_cells(room).size()
+	return n
+
+
+func _total_wc_dirt() -> int:
+	var total := 0
+	for room_id in wc_dirt:
+		total += int(wc_dirt[room_id])
+	return total
+
+
+## Una casilla libre dentro de los baños a la que ir a limpiar (mejor delante de un inodoro).
+func _bathroom_cell(room_id: int, from: Vector2i) -> Vector2i:
+	for room in layout.rooms_of("aseos"):
+		if room["id"] != room_id:
+			continue
+		var stalls := layout.stall_cells(room)
+		if not stalls.is_empty():
+			return stalls[0]
+		return layout.nearest_free_cell(room["rect"].position, from)
+	return from
+
+
+## Uno del grupo necesita ir al baño mientras esperan o comen: va a un puesto libre, tarda
+## un rato y vuelve. Si los puestos están ocupados espera (y se impacienta); sin baños
+## utilizables se queja, y eso cuenta en la valoración. Cada uso ensucia los baños.
 func _update_wc(g: CustomerGroup, dt: float) -> void:
 	if g.table == null or g.wc_member >= g.members.size():
 		return
@@ -1115,26 +1163,35 @@ func _update_wc(g: CustomerGroup, dt: float) -> void:
 				return
 			if g.state_time < 2.0 or not member.arrived() or member.last_cell != seat:
 				return
-			var spots := layout.working_use_cells("aseos")
-			if spots.is_empty():
+			var rooms := usable_bathrooms()
+			if rooms.is_empty():
 				g.wc_done = true
 				g.wc_denied = true
 				g.mood_bonus -= 0.15
 				day_stats["sin_banos"] += 1
-				announcement.emit("Alguien pregunta por los baños… ¡y no hay!", seat)
+				var broken := not layout.rooms_of("aseos").is_empty()
+				announcement.emit("Los baños están fuera de servicio" if broken else "Alguien pregunta por los baños… ¡y no hay!", seat)
 				return
 			var reserved := _reserved_use_cells()
 			var taken := cells_taken_by_others("")
-			var options: Array[Vector2i] = []
-			for c in spots:
-				if not reserved.has(c) and not taken.has(c):
-					options.append(c)
+			var options: Array = []
+			for room in rooms:
+				for c in layout.stall_cells(room):
+					if not reserved.has(c) and not taken.has(c):
+						options.append([c, room["id"]])
 			if options.is_empty():
-				return  # Están ocupados: lo intentará más tarde.
-			var spot := options[rng.randi() % options.size()]
-			if member.go_to(layout, spot):
+				# Todos los puestos ocupados: esperan su turno, pero no eternamente.
+				g.wc_wait += dt
+				if g.wc_wait > WC_PATIENCE and not g.wc_denied:
+					g.wc_denied = true
+					g.mood_bonus -= 0.06
+					announcement.emit("Hay cola para el baño", seat)
+				return
+			var pick: Array = options[rng.randi() % options.size()]
+			if member.go_to(layout, pick[0]):
 				g.wc_state = "yendo"
-				g.wc_cell = spot
+				g.wc_cell = pick[0]
+				g.wc_room = pick[1]
 		"yendo":
 			if member.arrived() and member.last_cell == g.wc_cell:
 				g.wc_state = "dentro"
@@ -1144,12 +1201,17 @@ func _update_wc(g: CustomerGroup, dt: float) -> void:
 			if g.wc_timer <= 0.0:
 				member.go_to(layout, seat)
 				g.wc_state = "volviendo"
+				var before: int = wc_dirt.get(g.wc_room, 0)
+				wc_dirt[g.wc_room] = before + 1
+				if before + 1 == WC_CLEAN_AT or before + 1 == WC_MAX_DIRT:
+					rooms_changed.emit()
 		"volviendo":
 			if member.arrived() and member.last_cell == seat:
 				g.wc_state = ""
 				g.wc_done = true
 				g.wc_cell = Vector2i(-999, -999)
-				g.mood_bonus += 0.03
+				if not g.wc_denied:
+					g.mood_bonus += 0.03
 
 
 # --- Clientes ---------------------------------------------------------------
@@ -1381,7 +1443,7 @@ func cleanliness() -> float:
 	for t in layout.tables:
 		if t.dirty:
 			dirty_tables += 1
-	return clampf(layout.limpieza + 20.0 - 7.0 * stains.size() - 5.0 * dirty_tables - 1.5 * bar_dirty, 0.0, 100.0)
+	return clampf(layout.limpieza + 20.0 - 7.0 * stains.size() - 5.0 * dirty_tables - 1.5 * bar_dirty - 1.5 * _total_wc_dirt(), 0.0, 100.0)
 
 
 func _add_stain_near(cell: Vector2i) -> void:
@@ -1493,6 +1555,11 @@ func _find_task(allowed: Array = []) -> Dictionary:
 	if bar_dirty >= BAR_CLEAN_AT and bar_cleaner == null and not layout.bar_posts().is_empty():
 		var urgent_bar := bar_dirty >= BAR_MAX_DIRT
 		best = _better_task(best, { "tipo": "limpiar_barra", "edad": float(bar_dirty), "prioridad": 1.5 if urgent_bar else 6.0 }, allowed)
+	for room in layout.rooms_of("aseos"):
+		var dirt: int = wc_dirt.get(room["id"], 0)
+		if dirt >= WC_CLEAN_AT and not wc_cleaning.has(room["id"]) and layout.room_ready(room):
+			best = _better_task(best, { "tipo": "limpiar_bano", "sala_id": room["id"], "edad": float(dirt),
+					"prioridad": 1.5 if dirt >= WC_MAX_DIRT else 5.5 }, allowed)
 	# Si hay gente esperando mesa, recoger las mesas sucias corre prisa.
 	var queue_waiting := queue_head != null and free_table_for(queue_head) == null
 	for table in layout.tables:
@@ -1565,6 +1632,10 @@ func start_task(w, task: Dictionary) -> void:
 			stains[task["celda"]] = w
 			task["fase"] = "ir_mesa"
 			w.mover.go_to(layout, task["celda"])
+		"limpiar_bano":
+			wc_cleaning[task["sala_id"]] = w
+			task["fase"] = "ir_bano"
+			w.mover.go_to(layout, _bathroom_cell(task["sala_id"], w.mover.last_cell))
 		"barra", "limpiar_barra":
 			if task["tipo"] == "barra":
 				task["grupo"].waiter = w
@@ -1603,6 +1674,10 @@ func _progress_waiter_task(w, dt: float) -> void:
 			if w.mover.arrived():
 				w.task["fase"] = "atender"
 				w.task["tiempo"] = (BAR_SERVE_TIME if w.task["tipo"] == "barra" else BAR_CLEAN_TIME) / w.speed_factor()
+		"ir_bano":
+			if w.mover.arrived():
+				w.task["fase"] = "atender"
+				w.task["tiempo"] = WC_CLEAN_TIME / w.speed_factor()
 		"ir_recepcion":
 			if w.mover.arrived():
 				w.task["fase"] = "atender"
@@ -1657,6 +1732,9 @@ func _finish_task(w) -> void:
 			_serve_bar(g)
 		"limpiar_barra":
 			bar_dirty = 0
+		"limpiar_bano":
+			wc_dirt[w.task["sala_id"]] = 0
+			rooms_changed.emit()
 	_end_waiter_task(w)
 
 
@@ -1670,6 +1748,9 @@ func _end_waiter_task(w) -> void:
 			g.table = null
 	if bar_cleaner == w:
 		bar_cleaner = null
+	for room_id in wc_cleaning.keys():
+		if wc_cleaning[room_id] == w:
+			wc_cleaning.erase(room_id)
 	var table = w.task.get("mesa")
 	if table != null and table.cleaner == w:
 		table.cleaner = null
@@ -1874,6 +1955,8 @@ func _close_day() -> void:
 	refresh_candidates()
 	_warned_no_drinks = false
 	bar_dirty = 0  # El servicio de limpieza de la noche también deja la barra impecable.
+	wc_dirt.clear()
+	rooms_changed.emit()
 	# Por la noche el gestor descansa.
 	manager.energy = 100.0
 	# El servicio de limpieza de la noche deja el local impecable para mañana.

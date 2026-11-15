@@ -18,7 +18,7 @@ const ROLE_TASKS := {
 	"sala": ["servir", "cobrar", "pedido"],
 	"barra": ["barra", "limpiar_barra"],
 	"acomodador": ["acomodar"],
-	"limpieza": ["recoger_mesa", "fregar", "limpiar_barra"],
+	"limpieza": ["recoger_mesa", "fregar", "limpiar_barra", "limpiar_bano"],
 }
 
 var id: int
@@ -138,4 +138,5 @@ func describe_task() -> String:
 		"fregar": return "Fregando el suelo"
 		"barra": return "Sirviendo en la barra"
 		"limpiar_barra": return "Limpiando la barra"
+		"limpiar_bano": return "Limpiando los baños"
 	return "Libre"

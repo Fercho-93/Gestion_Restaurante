@@ -97,6 +97,9 @@ var wc_timer := 0.0
 var wc_done := false
 ## Quería ir al baño y no había.
 var wc_denied := false
+## Baños en los que está (id de la habitación) y minutos que lleva esperando a que haya un puesto libre.
+var wc_room := -1
+var wc_wait := 0.0
 ## Quien lidera el grupo deja los abrigos en el ropero: "" / "yendo" / "dejando" / "volviendo".
 var coat_state := ""
 var coat_cell := Vector2i(-999, -999)

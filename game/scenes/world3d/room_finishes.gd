@@ -53,6 +53,7 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	add_child(_inner_root)
 	sim.finishes_changed.connect(rebuild)
 	sim.layout_changed.connect(_build_rooms)
+	sim.rooms_changed.connect(_build_rooms)
 	rebuild()
 	set_night(0.0)
 
@@ -406,10 +407,24 @@ func _build_rooms() -> void:
 			_room_root.add_child(strip)
 		var label := Label3D.new()
 		var missing := layout.room_missing(room)
-		label.text = def.get("nombre", "").to_upper() + ("" if missing.is_empty() else "\nfalta: " + ", ".join(missing).to_lower())
+		var text: String = def.get("nombre", "").to_upper()
+		var warn := not missing.is_empty()
+		if warn:
+			text += "\nfalta: " + ", ".join(missing).to_lower()
+		elif room["tipo"] == "aseos":
+			var dirt: int = sim.wc_dirt.get(room["id"], 0)
+			var stalls := layout.stall_cells(room).size()
+			text += "\n%d puesto%s" % [stalls, "" if stalls == 1 else "s"]
+			if dirt >= RestaurantSim.WC_MAX_DIRT:
+				text += " · fuera de servicio"
+				warn = true
+			elif dirt >= RestaurantSim.WC_CLEAN_AT:
+				text += " · sucios"
+				warn = true
+		label.text = text
 		label.font_size = 40
 		label.pixel_size = 0.006
-		label.modulate = color.darkened(0.55) if missing.is_empty() else Color("b23b3b")
+		label.modulate = color.darkened(0.55) if not warn else Color("b23b3b")
 		label.outline_size = 0
 		label.shaded = false
 		label.rotation = Vector3(-PI / 2.0, PI / 4.0, 0)

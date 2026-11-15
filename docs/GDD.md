@@ -201,7 +201,11 @@ Plan por pasos:
    - ✅ **Barra con servicio**: solo abre si hay alguien con el rol de barra tras el
      mostrador, bebidas en el almacén (se reponen con el pedido diario) y no está sucia.
      Cada copa ensucia la barra; la limpia el personal de limpieza (o el de la barra).
-   - Pendiente: aforo y limpieza de los baños.
+   - ✅ **Baños con aforo y limpieza**: un inodoro es un puesto, así que solo entran tantos
+     a la vez como inodoros haya; el resto espera su turno y, pasados 8 minutos, se queja.
+     Cada uso ensucia los baños: sucios los limpia el personal de limpieza (o la sala si no
+     hay) y del todo sucios quedan fuera de servicio, lo que cuenta como no tener baños.
+     La suciedad también baja la limpieza que ven los clientes y el rótulo avisa.
 
 #### Personal y roles
 El gestor contrata entre 3 candidatos nuevos cada día y asigna a cada empleado uno de

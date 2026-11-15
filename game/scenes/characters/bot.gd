@@ -30,6 +30,8 @@ var member_index := 0
 
 var _rig: Node3D
 var _torso: Node3D
+## Telas que cuelgan de la cintura (delantales, tabardos) y se balancean al andar.
+var _hanging: Array[Node3D] = []
 var _hand_l: Node3D
 var _hand_r: Node3D
 var _foot_l: MeshInstance3D
@@ -103,29 +105,15 @@ func setup(bot_role: Role, seed_value: int) -> void:
 		scale = Vector3.ONE * 1.15
 	match role:
 		Role.COCINERO:
-			_part(_torso, r["cylinder"], material(Color.WHITE), Vector3(0, 0.76, 0), Vector3(0.24, 0.13, 0.24))
-			_part(_torso, r["sphere"], material(Color.WHITE), Vector3(0, 0.86, 0), Vector3(0.32, 0.17, 0.32))
-			_part(_torso, r["torus"], material(Color("e05a5a")), Vector3(0, 0.47, 0), Vector3(0.95, 0.5, 0.82))
+			_dress_cook()
 		Role.CAMARERO:
-			_part(_torso, r["sphere"], material(Color("23242b")), Vector3(-0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
-			_part(_torso, r["sphere"], material(Color("23242b")), Vector3(0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
-			_part(_torso, r["box"], material(Color("2b2d36")), Vector3(0, 0.24, -0.176), Vector3(0.3, 0.2, 0.02))
+			_dress_waiter()
 		Role.BARRA:
-			# Camarero de barra: delantal largo granate, pajarita dorada y gorra plana.
-			_part(_torso, r["box"], material(Color("7b2d3a")), Vector3(0, 0.22, -0.176), Vector3(0.32, 0.3, 0.02))
-			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(-0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
-			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
-			_part(_torso, r["cylinder"], material(Color("2b2d36")), Vector3(0, 0.71, 0), Vector3(0.27, 0.05, 0.27))
+			_dress_bartender()
 		Role.ACOMODADOR:
-			# Anfitrión: chaqueta azul marino, corbata roja y una chapa dorada.
-			_part(_torso, r["box"], material(Color("27385a")), Vector3(0, 0.31, -0.176), Vector3(0.34, 0.34, 0.02))
-			_part(_torso, r["box"], material(Color("d94a4a")), Vector3(0, 0.38, -0.19), Vector3(0.05, 0.2, 0.02))
-			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(0.11, 0.4, -0.19), Vector3(0.05, 0.05, 0.03))
+			_dress_host()
 		Role.LIMPIEZA:
-			# Limpieza: tabardo verde, gorro azul claro y guantes amarillos.
-			_part(_torso, r["box"], material(Color("4f9d6b")), Vector3(0, 0.3, -0.176), Vector3(0.34, 0.36, 0.02))
-			_part(_torso, r["box"], material(Color("f2d23c")), Vector3(0, 0.15, -0.19), Vector3(0.12, 0.08, 0.02))
-			_part(_torso, r["cylinder"], material(Color("8fc8e8")), Vector3(0, 0.73, 0), Vector3(0.26, 0.1, 0.26))
+			_dress_cleaner()
 		Role.GESTOR:
 			scale = Vector3.ONE * 1.35
 		Role.CLIENTE:
@@ -220,6 +208,8 @@ func _animate() -> void:
 	var hand_l := 0.0
 	var hand_r := 0.0
 	var foot_swing := 0.0
+	# Balanceo de los delantales al andar: cuelgan de la cintura y solo se separan del cuerpo.
+	var cloth := 0.02 + sin(_idle_t * 1.7) * 0.01
 	var breathing := 1.0 + sin(_idle_t * 2.2) * 0.012
 	_rig.position.y = SEAT_HEIGHT if pose == Pose.SENTADO else 0.0
 	match pose:
@@ -230,9 +220,11 @@ func _animate() -> void:
 			hand_l = s * 0.6
 			hand_r = -s * 0.6
 			foot_swing = s * 0.07
+			cloth = 0.07 + s * 0.06
 			breathing = 1.0
 		Pose.TRABAJANDO:
 			lift = absf(sin(t * 6.0)) * 0.01
+			cloth = 0.05 + sin(t * 6.0) * 0.02
 			hand_l = 0.9 + sin(t * 10.0) * 0.35
 			hand_r = 0.9 - sin(t * 10.0) * 0.35
 		Pose.SENTADO:
@@ -244,6 +236,9 @@ func _animate() -> void:
 		hand_r = 1.3
 	_torso.position.y = lift
 	_torso.rotation.z = roll
+	for hang in _hanging:
+		# Sentado, la tela cae sobre las rodillas en vez de balancearse.
+		hang.rotation.x = 0.0 if pose == Pose.SENTADO else cloth
 	_torso.scale.y = breathing
 	_hand_l.rotation = Vector3(hand_l, 0, 0)
 	_hand_r.rotation = Vector3(hand_r, 0, 0)
@@ -282,6 +277,206 @@ func _add_plate(parent: Node3D, food: Color) -> void:
 	var r := resources()
 	_part(parent, r["cylinder"], material(Color.WHITE), Vector3.ZERO, Vector3(0.2, 0.015, 0.2))
 	_part(parent, r["sphere"], material(food.lerp(Color("d9a35b"), 0.5)), Vector3(0, 0.02, 0), Vector3(0.11, 0.05, 0.11))
+
+
+# --- Uniformes -----------------------------------------------------------------------------
+# La ropa se construye como prendas que siguen la forma del cuerpo (cápsula del torso):
+# delantales que cuelgan de la cintura, chalecos y chaquetas con abertura delantera, gorros
+# redondeados. Cuelgan del torso, así que respiran y se mueven con él.
+
+const BODY_RADIUS := 0.2
+const BODY_CENTER_Y := 0.38
+const BODY_HALF_STRAIGHT := 0.11
+const BODY_DEPTH := 0.86
+
+
+## Radio del torso a esa altura (cápsula: tramo recto y dos cúpulas).
+static func body_radius_at(y: float) -> float:
+	var dy := absf(y - BODY_CENTER_Y)
+	if dy <= BODY_HALF_STRAIGHT:
+		return BODY_RADIUS
+	var d := dy - BODY_HALF_STRAIGHT
+	if d >= BODY_RADIUS:
+		return 0.0
+	return BODY_RADIUS * sqrt(1.0 - (d / BODY_RADIUS) * (d / BODY_RADIUS))
+
+
+## Prenda: trozo de la superficie del torso entre dos alturas y dos ángulos (0 = de frente,
+## ±PI = de espaldas), separada un poco del cuerpo. Es un trozo de tela abierto por los lados.
+static func garment_mesh(y0: float, y1: float, angle0: float, angle1: float, offset: float = 0.012) -> ArrayMesh:
+	var key := "g_%.3f_%.3f_%.3f_%.3f_%.3f" % [y0, y1, angle0, angle1, offset]
+	var cache: Dictionary = resources()["garments"]
+	if cache.has(key):
+		return cache[key]
+	var rings := 12
+	var segments := maxi(3, int(absf(angle1 - angle0) / 0.12))
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for i in rings + 1:
+		var y := lerpf(y0, y1, float(i) / rings)
+		var r := body_radius_at(y) + offset
+		var axis_y := clampf(y, BODY_CENTER_Y - BODY_HALF_STRAIGHT, BODY_CENTER_Y + BODY_HALF_STRAIGHT)
+		for j in segments + 1:
+			var a := lerpf(angle0, angle1, float(j) / segments)
+			var p := Vector3(r * sin(a), y, -r * cos(a))
+			verts.append(p)
+			normals.append((p - Vector3(0, axis_y, 0)).normalized())
+	for i in rings:
+		for j in segments:
+			var k := i * (segments + 1) + j
+			indices.append_array([k, k + 1, k + segments + 1, k + 1, k + segments + 2, k + segments + 1])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	cache[key] = mesh
+	return mesh
+
+
+## Tela por las dos caras (se ve igual de dentro que de fuera).
+static func cloth(color: Color) -> StandardMaterial3D:
+	var r := resources()
+	var key := "cloth_" + color.to_html()
+	if not r["materials"].has(key):
+		var mat := (material(color).duplicate()) as StandardMaterial3D
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.roughness = 0.8
+		r["materials"][key] = mat
+	return r["materials"][key]
+
+
+## Pone una prenda en el torso. `hangs`: cuelga de la cintura y se balancea (delantales).
+func _wear(y0: float, y1: float, angle0: float, angle1: float, color: Color, hangs := false, offset: float = 0.012) -> MeshInstance3D:
+	var m := MeshInstance3D.new()
+	m.mesh = garment_mesh(y0, y1, angle0, angle1, offset)
+	m.material_override = cloth(color)
+	m.scale = Vector3(1, 1, BODY_DEPTH)
+	if hangs:
+		var pivot := Node3D.new()
+		pivot.position = Vector3(0, y1, 0)
+		_torso.add_child(pivot)
+		m.position = Vector3(0, -y1, 0)
+		pivot.add_child(m)
+		_hanging.append(pivot)
+	else:
+		_torso.add_child(m)
+	return m
+
+
+## Z de la superficie del cuerpo a esa altura (para pegar botones y detalles).
+static func surface_z(y: float, extra: float = 0.0) -> float:
+	return -(body_radius_at(y) + extra) * BODY_DEPTH
+
+
+func _bead(y: float, x: float, size: float, color: Color) -> void:
+	# Botón o chapa sobre el pecho, siguiendo la curvatura del cuerpo.
+	var r := body_radius_at(y)
+	var z := -sqrt(maxf(0.0, r * r - x * x)) * BODY_DEPTH
+	_part(_torso, resources()["sphere"], material(color), Vector3(x, y, z - 0.004), Vector3(size, size, size * 0.5))
+
+
+func _bow_tie(y: float, color: Color) -> void:
+	var r := resources()
+	var z := surface_z(y, 0.008)
+	for side in [-1.0, 1.0]:
+		var wing := _part(_torso, r["cone"], material(color), Vector3(side * 0.045, y, z), Vector3(0.05, 0.075, 0.035))
+		wing.rotation.z = -side * PI / 2.0
+	_part(_torso, r["sphere"], material(color.darkened(0.15)), Vector3(0, y, z - 0.004), Vector3(0.035, 0.035, 0.03))
+
+
+func _long_tie(y_top: float, length: float, color: Color) -> void:
+	var r := resources()
+	var z := surface_z(y_top - length / 2.0, 0.012)
+	var blade := _part(_torso, r["cone"], material(color), Vector3(0, y_top - length / 2.0 - 0.01, z), Vector3(0.07, length, 0.012))
+	blade.rotation.z = PI  # punta hacia abajo
+	_part(_torso, r["sphere"], material(color.darkened(0.15)), Vector3(0, y_top, surface_z(y_top, 0.012)), Vector3(0.045, 0.04, 0.03))
+
+
+## Gorra redondeada: cúpula que abraza la cabeza y, si se quiere, visera inclinada.
+func _cap(color: Color, y: float, visor := true, brim_all_round := false) -> void:
+	var r := resources()
+	_part(_torso, r["hemisphere"], material(color), Vector3(0, y, 0), Vector3(0.4, 0.25, 0.35))
+	_part(_torso, r["torus"], material(color.darkened(0.15)), Vector3(0, y + 0.004, 0), Vector3(0.86, 0.45, 0.76))
+	if visor:
+		var peak := _part(_torso, r["sphere"], material(color.darkened(0.1)), Vector3(0, y + 0.012, -0.15), Vector3(0.24, 0.025, 0.15))
+		peak.rotation.x = 0.28
+	if brim_all_round:
+		_part(_torso, r["sphere"], material(color.darkened(0.1)), Vector3(0, y + 0.01, 0), Vector3(0.52, 0.04, 0.46))
+
+
+func _dress_cook() -> void:
+	var r := resources()
+	# Gorro de cocinero: banda y tres bolsas de tela abombadas.
+	_part(_torso, r["cylinder"], material(Color.WHITE), Vector3(0, 0.735, 0), Vector3(0.235, 0.09, 0.205))
+	_part(_torso, r["sphere"], material(Color.WHITE), Vector3(0, 0.82, 0), Vector3(0.3, 0.17, 0.26))
+	for side in [-1.0, 1.0]:
+		_part(_torso, r["sphere"], material(Color.WHITE), Vector3(side * 0.085, 0.84, 0), Vector3(0.17, 0.15, 0.17))
+	_part(_torso, r["sphere"], material(Color.WHITE), Vector3(0, 0.875, 0), Vector3(0.2, 0.13, 0.19))
+	# Pañuelo rojo anudado al cuello.
+	_part(_torso, r["torus"], material(Color("e05a5a")), Vector3(0, 0.47, 0), Vector3(0.95, 0.5, 0.82))
+	_part(_torso, r["cone"], material(Color("e05a5a")), Vector3(0, 0.425, surface_z(0.43, 0.01)), Vector3(0.06, 0.075, 0.02)).rotation.z = PI
+	# Casaca cruzada: dos filas de botones.
+	for y in [0.4, 0.33, 0.26, 0.19]:
+		for x in [-0.07, 0.07]:
+			_bead(y, x, 0.026, Color("5a6068"))
+
+
+func _dress_waiter() -> void:
+	var black := Color("23242b")
+	_bow_tie(0.46, black)
+	# Delantal corto de cintura: cuelga y se balancea; cinta en la cintura.
+	_wear(0.1, 0.34, -1.2, 1.2, black, true, 0.014)
+	_part(_torso, resources()["torus"], material(black), Vector3(0, 0.335, 0), Vector3(1.0, 0.45, 0.88))
+	# Bolsillo del delantal.
+	_part(_torso, resources()["sphere"], material(Color("34363f")), Vector3(0.07, 0.2, surface_z(0.2, 0.02)), Vector3(0.09, 0.07, 0.02))
+
+
+func _dress_bartender() -> void:
+	var wine := Color("7b2d3a")
+	var gold := Color("e0b43b")
+	# Delantal largo de bistró bajo el chaleco.
+	_wear(0.12, 0.3, -1.05, 1.05, Color("2b2d36"), true, 0.014)
+	# Chaleco granate: dos delanteros con la abertura en V y la espalda.
+	_wear(0.26, 0.45, 0.2, 2.05, wine, false, 0.016)
+	_wear(0.26, 0.45, -2.05, -0.2, wine, false, 0.016)
+	_wear(0.26, 0.45, 2.05, 4.23, wine.darkened(0.15), false, 0.016)
+	for y in [0.4, 0.34, 0.28]:
+		_bead(y, 0.0, 0.022, gold)
+	_bow_tie(0.452, gold)
+	_cap(Color("2b2d36"), 0.625)
+
+
+func _dress_host() -> void:
+	var navy := Color("27385a")
+	# Chaqueta azul marino con la abertura delantera, solapas y cuello.
+	_wear(0.15, 0.45, 0.17, 2.15, navy, false, 0.018)
+	_wear(0.15, 0.45, -2.15, -0.17, navy, false, 0.018)
+	_wear(0.15, 0.45, 2.15, 4.13, navy.darkened(0.1), false, 0.018)
+	_part(_torso, resources()["torus"], material(navy), Vector3(0, 0.448, 0), Vector3(1.0, 0.5, 0.88))
+	# Solapas: tiras más claras a los lados de la abertura.
+	_wear(0.3, 0.45, 0.17, 0.6, navy.lightened(0.14), false, 0.024)
+	_wear(0.3, 0.45, -0.6, -0.17, navy.lightened(0.14), false, 0.024)
+	_long_tie(0.435, 0.2, Color("d94a4a"))
+	_bead(0.37, 0.115, 0.045, Color("e0b43b"))
+	# Pañuelo blanco en el bolsillo.
+	_part(_torso, resources()["sphere"], material(Color.WHITE), Vector3(-0.1, 0.32, surface_z(0.32, 0.026)), Vector3(0.05, 0.03, 0.015))
+
+
+func _dress_cleaner() -> void:
+	var green := Color("4f9d6b")
+	# Tabardo verde: panel delantero y trasero, abiertos por los lados; el delantero cuelga.
+	_wear(0.12, 0.45, -1.25, 1.25, green, true, 0.016)
+	_wear(0.12, 0.45, 1.89, 4.39, green.darkened(0.1), false, 0.016)
+	_part(_torso, resources()["sphere"], material(Color("f2d23c")), Vector3(0.06, 0.3, surface_z(0.3, 0.03)), Vector3(0.09, 0.07, 0.02))
+	# Gorro de tela con ala y guantes de goma con puño.
+	_cap(Color("8fc8e8"), 0.62, false, true)
+	for hand in [_hand_l, _hand_r]:
+		var side := signf(hand.position.x)
+		_part(hand, resources()["torus"], material(Color("d9b72a")), Vector3(0.045 * side, -0.045, 0), Vector3(0.22, 0.9, 0.22))
 
 
 ## Complementos de los clientes para que no todos sean iguales.
@@ -335,6 +530,17 @@ static func resources() -> Dictionary:
 	cylinder.top_radius = 0.5
 	cylinder.bottom_radius = 0.5
 	cylinder.height = 1.0
+	var cone := CylinderMesh.new()
+	cone.top_radius = 0.0
+	cone.bottom_radius = 0.5
+	cone.height = 1.0
+	cone.radial_segments = 16
+	var hemisphere := SphereMesh.new()
+	hemisphere.radius = 0.5
+	hemisphere.height = 0.5
+	hemisphere.is_hemisphere = true
+	hemisphere.radial_segments = 24
+	hemisphere.rings = 8
 	var torus := TorusMesh.new()
 	torus.inner_radius = 0.17
 	torus.outer_radius = 0.23
@@ -355,7 +561,7 @@ static func resources() -> Dictionary:
 	for icon in ["reloj", "cubiertos", "corazon", "tarta", "lapiz"]:
 		thought_icons[icon] = _icon_texture(icon)
 	_res = {
-		"capsule": capsule, "sphere": sphere, "cylinder": cylinder, "torus": torus,
+		"capsule": capsule, "sphere": sphere, "cylinder": cylinder, "torus": torus, "cone": cone, "hemisphere": hemisphere, "garments": {},
 		"box": BoxMesh.new(), "eyes_quad": quad, "visor": visor,
 		"eyes_material": eyes_material, "eye_textures": textures, "materials": {},
 		"thought_bubble": _bubble_texture(), "thought_icons": thought_icons,

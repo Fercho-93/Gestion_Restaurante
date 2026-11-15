@@ -769,6 +769,14 @@ func use_cells(room_tipo: String = "") -> Array[Vector2i]:
 	return out
 
 
+## Casillas desde las que se usa cada inodoro de unos baños (un puesto = un inodoro).
+func stall_cells(room: Dictionary) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for f in furniture_in(room, "inodoro"):
+		out.append(f["celda"] + rotate_cell(v2i(catalog["inodoro"]["uso"]), f["rot"]))
+	return out
+
+
 ## Taburetes de las barras que funcionan (tienen mostrador).
 func bar_stools() -> Array[Vector2i]:
 	var out: Array[Vector2i] = []
