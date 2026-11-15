@@ -1,0 +1,52 @@
+[
+	{
+		"id": "aseos",
+		"nombre": "Baños",
+		"color": "8ec1ec",
+		"precio_casilla": 10,
+		"minimo": 4,
+		"necesita": [
+			"inodoro",
+			"lavabo"
+		],
+		"dentro_de": "unos baños",
+		"descripcion": "Los clientes los usan mientras comen. Necesitan inodoro y lavabo; sin baños la gente se queja."
+	},
+	{
+		"id": "ropero",
+		"nombre": "Ropero",
+		"color": "e6a9c4",
+		"precio_casilla": 10,
+		"minimo": 2,
+		"necesita": [
+			"perchero"
+		],
+		"dentro_de": "un ropero",
+		"descripcion": "Los clientes dejan aquí el abrigo al llegar y se sienten mejor atendidos."
+	},
+	{
+		"id": "barra",
+		"nombre": "Barra de bar",
+		"color": "e6c98b",
+		"precio_casilla": 10,
+		"minimo": 4,
+		"necesita": [
+			"barra_bar",
+			"taburete"
+		],
+		"dentro_de": "una barra de bar",
+		"descripcion": "Los que esperan mesa se sientan en la barra a tomar algo: aguantan más y dejan dinero."
+	},
+	{
+		"id": "despacho",
+		"nombre": "Despacho",
+		"color": "b8a98f",
+		"precio_casilla": 10,
+		"minimo": 4,
+		"necesita": [
+			"ordenador"
+		],
+		"dentro_de": "un despacho",
+		"descripcion": "Desde su ordenador gestionas el restaurante. Sin despacho no hay gestión."
+	}
+]

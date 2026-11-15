@@ -42,6 +42,11 @@ const SIDESTEP_AFTER := 1.5
 const GHOST_AFTER := 4.0
 ## Lo que se recupera al vender un mueble (lo comprado en la misma reforma se devuelve entero).
 const RESALE_FRACTION := 0.5
+## Habitaciones: lo que se paga por una copa en la barra, minutos en el ropero y en el baño.
+const BAR_DRINK_PRICE := 3.2
+const COAT_TIME := 0.5
+const WC_MIN_TIME := 1.2
+const WC_MAX_TIME := 2.4
 
 var layout: RestaurantLayout
 var recipes: Dictionary
@@ -227,6 +232,9 @@ func order_manager_walk(cell: Vector2i) -> void:
 
 
 func order_manager_use(object_id: String) -> void:
+	if not layout.objects.has(object_id):
+		announcement.emit("Aquí ya no hay %s" % object_id, manager.mover.last_cell)
+		return
 	_end_talk()
 	_stop_manager_work()
 	manager.go_use(layout, object_id, cells_taken_by_others("m"))
@@ -425,7 +433,7 @@ func _unblock(m: Mover, key: String) -> void:
 			sides[j] = tmp
 		for d in sides:
 			var c := m.last_cell + d
-			if layout.can_stand(c) and cell_free_for(c, key) and not others.has(c):
+			if layout.can_stand(c) and cell_free_for(c, key) and not others.has(c) and not layout.find_path(c, m.goal).is_empty():
 				m.path.clear()
 				m.path.append(c)
 				return
@@ -463,7 +471,8 @@ func _step_aside_from(m: Mover, key: String, other: Mover) -> bool:
 	var frontier: Array[Vector2i] = [m.last_cell]
 	while not frontier.is_empty():
 		var c: Vector2i = frontier.pop_front()
-		if c != m.last_cell and not in_the_way.has(c):
+		# No vale un rincón sin salida (rodeado de sillas y muebles): se quedaría encerrado.
+		if c != m.last_cell and not in_the_way.has(c) and not layout.find_path(c, m.goal).is_empty():
 			var route: Array[Vector2i] = []
 			while c != m.last_cell:
 				route.push_front(c)
@@ -710,6 +719,166 @@ func _after_layout_change() -> void:
 	layout_changed.emit()
 
 
+# --- Habitaciones -------------------------------------------------------------
+
+## Lo que cuesta crear una habitación en este rectángulo.
+func room_cost(tipo: String, rect: Rect2i) -> float:
+	return float(layout.room_types.get(tipo, {}).get("precio_casilla", 0)) * rect.size.x * rect.size.y
+
+
+## Crea una habitación entre dos esquinas. "" si se hizo, o el motivo.
+func create_room(tipo: String, a: Vector2i, b: Vector2i) -> String:
+	var rect := RestaurantLayout.rect_between(a, b)
+	var problem := layout.room_problem(tipo, rect)
+	if problem != "":
+		return problem
+	var cost := 0.0 if free_build else room_cost(tipo, rect)
+	if cost > finances.money:
+		return "No hay dinero suficiente (cuesta %d €)" % int(cost)
+	if cost > 0.0:
+		finances.spend("obras", cost)
+	layout.add_room(tipo, rect)
+	finishes_changed.emit()
+	layout_changed.emit()
+	return ""
+
+
+## Derriba la habitación que contiene esta casilla. "" si se hizo, o el motivo.
+func remove_room_at(cell: Vector2i) -> String:
+	var room := layout.room_at(cell)
+	if room.is_empty():
+		return "Ahí no hay ninguna habitación"
+	var problem := layout.room_removal_problem(room)
+	if problem != "":
+		return problem
+	layout.remove_room(room["id"])
+	finishes_changed.emit()
+	layout_changed.emit()
+	return ""
+
+
+## Casillas donde hay alguien parado o yendo (para no mandar a dos al mismo sitio).
+func _reserved_use_cells() -> Dictionary:
+	var taken := {}
+	for g in groups:
+		if g.wc_cell != Vector2i(-999, -999) and g.wc_state != "":
+			taken[g.wc_cell] = true
+		if g.coat_cell != Vector2i(-999, -999) and g.coat_state in ["yendo", "dejando"]:
+			taken[g.coat_cell] = true
+		for c in g.bar_cells:
+			taken[c] = true
+	return taken
+
+
+## Esperan mesa: si hay una barra con sitio para todos, se sientan a tomar algo.
+func _update_bar(g: CustomerGroup, dt: float) -> void:
+	if not g.at_bar:
+		# Solo van a la barra si no hay mesa para ellos todavía.
+		if g.state_time < 0.5 or free_table_for(g) != null:
+			return
+		var free: Array[Vector2i] = []
+		var reserved := _reserved_use_cells()
+		for c in layout.bar_stools():
+			if not reserved.has(c) and not cells_taken_by_others("").has(c):
+				free.append(c)
+		if free.size() < g.size:
+			return
+		var picked: Array[Vector2i] = []
+		for i in g.size:
+			picked.append(free[i])
+		var moved := true
+		for i in g.size:
+			moved = g.members[i].go_to(layout, picked[i]) and moved
+		if not moved:
+			return
+		g.at_bar = true
+		g.bar_cells = picked
+		g.queue_cell = Vector2i(-999, -999)
+		return
+	if g.bar_paid:
+		return
+	var seated := true
+	for i in g.size:
+		seated = seated and g.members[i].arrived() and g.members[i].last_cell == g.bar_cells[i]
+	if seated:
+		# Piden algo de beber: dinero en caja y más paciencia mientras esperan mesa.
+		g.bar_paid = true
+		finances.earn("barra", BAR_DRINK_PRICE * g.size * price_level)
+		g.patience_bonus += CustomerGroup.PATIENCE[CustomerGroup.State.EN_COLA] * 0.8
+		g.mood_bonus += 0.03
+
+
+## Quien deja los abrigos: va al ropero, tarda un momento y se une al grupo en la mesa.
+func _update_coat(g: CustomerGroup, dt: float) -> void:
+	var leader := g.members[0]
+	match g.coat_state:
+		"yendo":
+			if leader.arrived() and leader.last_cell == g.coat_cell:
+				g.coat_state = "dejando"
+				g.coat_timer = COAT_TIME
+		"dejando":
+			g.coat_timer -= dt
+			if g.coat_timer <= 0.0:
+				leader.go_to(layout, g.table.seats[0])
+				g.coat_state = "volviendo"
+		"volviendo":
+			if leader.arrived() and leader.last_cell == g.table.seats[0]:
+				g.coat_state = ""
+				g.mood_bonus += 0.05
+
+
+## Uno del grupo necesita ir al baño mientras esperan o comen: va, tarda un rato y vuelve.
+## Sin baños (o sin equipar) se queja, y eso cuenta en la valoración.
+func _update_wc(g: CustomerGroup, dt: float) -> void:
+	if g.table == null or g.wc_member >= g.members.size():
+		return
+	var member := g.members[g.wc_member]
+	var seat: Vector2i = g.table.seats[g.wc_member]
+	match g.wc_state:
+		"":
+			if not g.wc_need or g.wc_done or g.coat_state != "":
+				return
+			if g.state != CustomerGroup.State.ESPERANDO_COMIDA and g.state != CustomerGroup.State.COMIENDO:
+				return
+			if g.state_time < 2.0 or not member.arrived() or member.last_cell != seat:
+				return
+			var spots := layout.working_use_cells("aseos")
+			if spots.is_empty():
+				g.wc_done = true
+				g.wc_denied = true
+				g.mood_bonus -= 0.15
+				day_stats["sin_banos"] += 1
+				announcement.emit("Alguien pregunta por los baños… ¡y no hay!", seat)
+				return
+			var reserved := _reserved_use_cells()
+			var taken := cells_taken_by_others("")
+			var options: Array[Vector2i] = []
+			for c in spots:
+				if not reserved.has(c) and not taken.has(c):
+					options.append(c)
+			if options.is_empty():
+				return  # Están ocupados: lo intentará más tarde.
+			var spot := options[rng.randi() % options.size()]
+			if member.go_to(layout, spot):
+				g.wc_state = "yendo"
+				g.wc_cell = spot
+		"yendo":
+			if member.arrived() and member.last_cell == g.wc_cell:
+				g.wc_state = "dentro"
+				g.wc_timer = rng.randf_range(WC_MIN_TIME, WC_MAX_TIME)
+		"dentro":
+			g.wc_timer -= dt
+			if g.wc_timer <= 0.0:
+				member.go_to(layout, seat)
+				g.wc_state = "volviendo"
+		"volviendo":
+			if member.arrived() and member.last_cell == seat:
+				g.wc_state = ""
+				g.wc_done = true
+				g.wc_cell = Vector2i(-999, -999)
+				g.mood_bonus += 0.03
+
+
 # --- Clientes ---------------------------------------------------------------
 
 func _spawn_customers(dt: float) -> void:
@@ -773,9 +942,10 @@ func _update_groups(dt: float) -> void:
 				if g.all_arrived():
 					g.set_state(CustomerGroup.State.EN_COLA)
 			CustomerGroup.State.EN_COLA:
-				pass  # Esperan a que alguien les acompañe a una mesa.
+				_update_bar(g, dt)  # Esperan mesa (en la calle o sentados en la barra).
 			CustomerGroup.State.YENDO_A_MESA:
-				if g.all_arrived():
+				_update_coat(g, dt)
+				if g.all_arrived() and g.coat_state == "":
 					g.set_state(CustomerGroup.State.ESPERANDO_PEDIR)
 					_bother_neighbors_if_noisy(g)
 			CustomerGroup.State.COMIENDO:
@@ -785,6 +955,7 @@ func _update_groups(dt: float) -> void:
 			CustomerGroup.State.SALIENDO:
 				if g.all_arrived():
 					g.set_state(CustomerGroup.State.FUERA)
+		_update_wc(g, dt)
 		if g.is_fed_up():
 			_leave_angry(g, _fed_up_reason(g))
 
@@ -860,6 +1031,8 @@ func _update_queue_positions() -> void:
 	for g in groups:
 		if g.state != CustomerGroup.State.LLEGANDO and g.state != CustomerGroup.State.EN_COLA:
 			continue
+		if g.at_bar:
+			continue
 		var target := layout.queue_cells[mini(index, layout.queue_cells.size() - 1)]
 		index += 1
 		if g.queue_cell != target:
@@ -912,8 +1085,20 @@ func first_in_queue() -> CustomerGroup:
 func _seat(g: CustomerGroup) -> void:
 	if g.birthday:
 		announcement.emit("¡Hay un cumpleaños en una mesa!", g.table.cell)
+	g.at_bar = false
+	g.bar_cells.clear()
 	for i in g.members.size():
 		g.members[i].go_to(layout, g.table.seats[i])
+	# A veces hace falta ir al baño durante la comida (un miembro del grupo).
+	g.wc_need = rng.randf() < (0.3 if g.size == 1 else 0.5)
+	g.wc_member = rng.randi() % g.size
+	# Quien lidera el grupo pasa antes por el ropero a dejar los abrigos.
+	var coat_spots := layout.working_use_cells("ropero")
+	if not coat_spots.is_empty() and rng.randf() < 0.7:
+		var spot := coat_spots[rng.randi() % coat_spots.size()]
+		if g.members[0].go_to(layout, spot):
+			g.coat_state = "yendo"
+			g.coat_cell = spot
 	g.set_state(CustomerGroup.State.YENDO_A_MESA)
 
 
@@ -969,6 +1154,10 @@ func _leave(g: CustomerGroup) -> void:
 		g.table.group = null
 		g.table = null
 	kitchen_queue = kitchen_queue.filter(func(t: Dictionary): return t["grupo"] != g)
+	g.wc_state = ""
+	g.coat_state = ""
+	g.at_bar = false
+	g.bar_cells.clear()
 	g.set_state(CustomerGroup.State.SALIENDO)
 	for m in g.members:
 		m.go_to(layout, layout.spawn_cell)
@@ -1270,7 +1459,10 @@ func _charge(g: CustomerGroup) -> void:
 	day_stats["clientes_servidos"] += g.size
 	day_stats["satisfaccion_total"] += g.satisfaction
 	_update_reputation(g.satisfaction)
-	_remember_visit(g, _visit_note(g, satisfaction_parts(g, service)))
+	var note := _visit_note(g, satisfaction_parts(g, service))
+	if g.wc_denied and g.satisfaction < 80.0:
+		note = "No había baños"
+	_remember_visit(g, note)
 	_leave(g)
 
 
@@ -1403,6 +1595,7 @@ func _reset_day_stats() -> void:
 		"platos": {},
 		"platos_tirados": 0,
 		"invitaciones": 0.0,
+		"sin_banos": 0,
 	}
 
 

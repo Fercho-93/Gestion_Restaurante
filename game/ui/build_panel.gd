@@ -7,7 +7,7 @@ extends Control
 signal done
 
 const TABS := [["mesas", "Mesas"], ["decoracion", "Decoración"], ["luces", "Luces"], ["suelos", "Suelos"],
-		["paredes", "Paredes"], ["ventanas", "Ventanas"], ["cuadros", "Cuadros"]]
+		["paredes", "Paredes"], ["ventanas", "Ventanas"], ["cuadros", "Cuadros"], ["habitaciones", "Habitaciones"]]
 const PAPER := Color("fffaf2")
 const INK := Color("37474f")
 const GREEN := Color("66bb6a")
@@ -54,8 +54,8 @@ func _build_ui() -> void:
 	for t in TABS:
 		var b := Button.new()
 		b.text = t[1]
-		b.custom_minimum_size = Vector2(160, 66)
-		b.add_theme_font_size_override("font_size", 25)
+		b.custom_minimum_size = Vector2(130, 66)
+		b.add_theme_font_size_override("font_size", 22)
 		b.pressed.connect(_show_tab.bind(t[0]))
 		header.add_child(b)
 		_tab_buttons[t[0]] = b
@@ -145,6 +145,16 @@ func _show_tab(tab: String) -> void:
 				var def: Dictionary = layout.wall_catalog["aberturas"][id]
 				_add_card("p:abertura:" + id, def["nombre"], "%d € · amb. +%s" % [int(def["precio"]), _num(def["ambiente"])], Icon.new("abertura", id), build.choose_wall.bind("abertura", id))
 			_add_card("p:abertura:", "Tapiar ventana", "Cierra el hueco", Icon.new("quitar", ""), build.choose_wall.bind("abertura", ""))
+		"habitaciones":
+			for id in layout.room_types:
+				var def: Dictionary = layout.room_types[id]
+				_add_card("h:" + id, def["nombre"], "%d € por casilla" % int(def["precio_casilla"]), Icon.new("habitacion", id, Color(def["color"])), build.choose_room.bind(id))
+			_add_card("h:", "Derribar", "Si está sin equipo", Icon.new("quitar", ""), build.choose_room.bind(""))
+			for id in layout.catalog:
+				var def: Dictionary = layout.catalog[id]
+				if def.get("categoria", "") == "equipo":
+					var where: String = layout.room_types.get(def["solo_en"], {}).get("nombre", "")
+					_add_card("m:" + id, def["nombre"], "%d € · en %s" % [int(def["precio"]), where.to_lower()], _thumbnail(def), build.choose.bind(id))
 		"cuadros", "luces":
 			for id in layout.catalog:
 				var def: Dictionary = layout.catalog[id]
@@ -223,10 +233,12 @@ class Icon extends Control:
 	const OPENINGS := { "ventana_pequena": [0.5, 0.95, 1.35], "ventana": [0.7, 0.7, 1.35], "ventanal": [0.9, 0.1, 1.45] }
 	var kind := ""
 	var id := ""
+	var tint := Color.WHITE
 
-	func _init(k: String, i: String) -> void:
+	func _init(k: String, i: String, c: Color = Color.WHITE) -> void:
 		kind = k
 		id = i
+		tint = c
 		custom_minimum_size = Vector2(220, 116)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
@@ -246,6 +258,11 @@ class Icon extends Control:
 				draw_rect(glass.grow(3.0), Color.WHITE)
 				draw_rect(glass, Color("a9d3f0"))
 				draw_line(Vector2(c.x, glass.position.y), Vector2(c.x, glass.end.y), Color.WHITE, 2.0)
+			"habitacion":
+				draw_rect(Rect2(Vector2.ZERO, size), Color("e9dfcb"))
+				draw_rect(Rect2(c - Vector2(70, 40), Vector2(140, 80)), Color(tint, 0.55))
+				draw_rect(Rect2(c - Vector2(70, 40), Vector2(140, 80)), tint.darkened(0.3), false, 3.0)
+				draw_string(ThemeDB.fallback_font, c + Vector2(-44, 8), id.to_upper().substr(0, 7), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, tint.darkened(0.6))
 			"quitar":
 				draw_rect(Rect2(Vector2(c.x - 40, c.y - 30), Vector2(80, 60)), Color("e0d3bd"), false, 3.0)
 				draw_line(c + Vector2(-34, -24), c + Vector2(34, 24), Color("e57373"), 5.0)
@@ -364,6 +381,10 @@ func _refresh() -> void:
 			for scope in [["tramo", "Un tramo"], ["pared", "Pared entera"]]:
 				_choice(scope[1], build.wall_scope == scope[0], build.set_wall_scope.bind(scope[0]))
 			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
+		BuildMode.Mode.HABITACION:
+			if text == "":
+				text = "Toca una esquina de la habitación." if build.room_type != "" else "Toca la habitación que quieras derribar."
+			_button("Cerrar", Color(0, 0, 0, 0), Color("78909c"), build.cancel)
 		BuildMode.Mode.ELEGIDO:
 			if text == "":
 				text = build.display_name()
@@ -389,6 +410,8 @@ func _is_chosen(key: String) -> bool:
 		return build.mode == BuildMode.Mode.COLOCANDO and build.uid == -1 and build.tipo == key.substr(2)
 	if key.begins_with("f:"):
 		return build.mode == BuildMode.Mode.PINTANDO and build.floor_material == key.substr(2)
+	if key.begins_with("h:"):
+		return build.mode == BuildMode.Mode.HABITACION and build.room_type == key.substr(2)
 	if key.begins_with("p:"):
 		var parts := key.split(":")
 		return build.mode == BuildMode.Mode.PARED and build.wall_part == parts[1] and build.wall_id == parts[2]

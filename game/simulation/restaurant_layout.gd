@@ -72,6 +72,14 @@ var floors := {}
 var walls := {}
 ## Filas de la fachada que son la puerta (no se pueden editar).
 var door_rows: Array[int] = []
+## Habitaciones: tipos (de habitaciones.json) y las creadas {id, tipo, rect: Rect2i}.
+var room_types: Dictionary = {}
+var rooms: Array[Dictionary] = []
+var _next_room_id := 1
+## Objetos que trae el local de fábrica (la cafetera); el resto salen de los muebles.
+var _fixed_objects := {}
+## Taburetes colocados.
+var stools: Array[Vector2i] = []
 var _furniture_ambience := 0.0
 var _ref_floor_ambience := 0.0
 var _ref_floor_cleanliness := 0.0
@@ -100,6 +108,7 @@ func _init(d: Dictionary, furniture_catalog: Dictionary = {}, finishes: Dictiona
 	catalog = furniture_catalog
 	floor_catalog = finishes.get("suelos", {})
 	wall_catalog = finishes.get("paredes", {})
+	room_types = finishes.get("habitaciones", {})
 	size = v2i(d["tamano"])
 	region = Rect2i(-STREET_WIDTH, 0, size.x + STREET_WIDTH, size.y)
 	spawn_cell = v2i(d["aparicion"])
@@ -111,6 +120,7 @@ func _init(d: Dictionary, furniture_catalog: Dictionary = {}, finishes: Dictiona
 	for o in d.get("objetos", []):
 		objects[o["id"]] = { "nombre": o["nombre"], "celda": v2i(o["celda"]), "uso": v2i(o["uso"]),
 				"sentado": o.get("sentado", true) }
+	_fixed_objects = objects.duplicate(true)
 	ambiente_base = float(d["ambiente"])
 	ambiente = ambiente_base
 	if d.has("puerta_cocina"):
@@ -139,6 +149,7 @@ func _init(d: Dictionary, furniture_catalog: Dictionary = {}, finishes: Dictiona
 		})
 	_find_buildable_cells()
 	_init_finishes()
+	_init_rooms()
 	for m in d.get("muebles", []):
 		furniture.append({ "uid": _next_uid, "tipo": m["tipo"], "celda": v2i(m["celda"]), "rot": int(m.get("rot", 0)) })
 		_next_uid += 1
@@ -228,6 +239,16 @@ func placement_problem(tipo: String, cell: Vector2i, rot: int, ignore_uid: int =
 		if not buildable.has(cell) and not _is_hangable(cell):
 			return "Aquí no se puede colgar"
 		return ""
+	var def: Dictionary = catalog[tipo]
+	if def.get("solo_en", "") != "":
+		for c in fp["solid"]:
+			var room := room_at(c)
+			if room.is_empty() or room["tipo"] != def["solo_en"]:
+				return "Esto va dentro de %s" % room_types.get(def["solo_en"], {}).get("dentro_de", "una habitación")
+	elif def.get("tipo", "") == "mesa":
+		for c in fp["solid"] + fp["seats"]:
+			if not room_at(c).is_empty():
+				return "Las mesas van en el comedor, no en una habitación"
 	var taken := {}
 	for f in furniture:
 		if f["uid"] == ignore_uid:
@@ -266,6 +287,8 @@ func accessibility_problem() -> String:
 	must_reach.append_array(waiter_homes)
 	for o in objects.values():
 		must_reach.append(o["uso"])
+	must_reach.append_array(use_cells())
+	must_reach.append_array(stools)
 	for c in must_reach:
 		if find_path(from, c).is_empty():
 			return "Cortaría el paso por el local"
@@ -320,9 +343,17 @@ func _rebuild() -> void:
 	tables.clear()
 	obstacles = _fixed_obstacles.duplicate()
 	_furniture_ambience = 0.0
+	stools.clear()
+	objects = _fixed_objects.duplicate(true)
 	for f in furniture:
 		var def: Dictionary = catalog.get(f["tipo"], {})
 		_furniture_ambience += float(def.get("ambiente", 0))
+		if def.get("taburete", false):
+			stools.append(f["celda"])
+		if def.has("objeto"):
+			# Un mueble que el gestor puede usar (el ordenador): se sienta en la casilla de uso.
+			objects[def["objeto"]] = { "nombre": def["nombre"], "celda": f["celda"],
+					"uso": f["celda"] + rotate_cell(v2i(def["uso"]), f["rot"]), "sentado": true }
 		var fp := footprint(f["tipo"], f["celda"], f["rot"])
 		if def.get("tipo", "") == "mesa":
 			var table: Table = old.get(f["uid"], Table.new())
@@ -369,6 +400,8 @@ func _build_navigation() -> void:
 		astar.set_point_solid(o["celda"])
 		if o["sentado"]:
 			_sittable[o["uso"]] = true
+	for c in stools:
+		_sittable[c] = true
 	for seat in _sittable:
 		astar.set_point_solid(seat)
 	# Quien pasa por la calle evita la fila de la cola (como haría la gente).
@@ -612,3 +645,138 @@ func _recompute_finish_effects() -> void:
 		clean = _floor_cleanliness() - _ref_floor_cleanliness
 	ambiente = clampf(ambiente_base + _furniture_ambience + extra, 0.0, 100.0)
 	limpieza = clampf(limpieza_base + clean, 0.0, 100.0)
+
+
+# --- Habitaciones --------------------------------------------------------------------------
+
+## El despacho de fábrica es una habitación más.
+func _init_rooms() -> void:
+	if not room_types.has("despacho"):
+		return
+	for zone in zones:
+		if zone["nombre"] == "Despacho":
+			rooms.append({ "id": _next_room_id, "tipo": "despacho", "rect": zone["rect"] })
+			_next_room_id += 1
+
+
+## La habitación que contiene esta casilla, o {}.
+func room_at(cell: Vector2i) -> Dictionary:
+	for r in rooms:
+		if r["rect"].has_point(cell):
+			return r
+	return {}
+
+
+func rooms_of(tipo: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for r in rooms:
+		if r["tipo"] == tipo:
+			out.append(r)
+	return out
+
+
+static func rect_between(a: Vector2i, b: Vector2i) -> Rect2i:
+	var top_left := Vector2i(mini(a.x, b.x), mini(a.y, b.y))
+	return Rect2i(top_left, Vector2i(absi(a.x - b.x) + 1, absi(a.y - b.y) + 1))
+
+
+## Muebles de este tipo que hay dentro de la habitación.
+func furniture_in(room: Dictionary, tipo: String = "") -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for f in furniture:
+		if room["rect"].has_point(f["celda"]) and (tipo == "" or f["tipo"] == tipo):
+			out.append(f)
+	return out
+
+
+## ¿Tiene la habitación todo lo que necesita para funcionar?
+func room_ready(room: Dictionary) -> bool:
+	for need in room_types.get(room["tipo"], {}).get("necesita", []):
+		if furniture_in(room, need).is_empty():
+			return false
+	return true
+
+
+## Lo que le falta a la habitación (nombres de muebles), o [] si está completa.
+func room_missing(room: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for need in room_types.get(room["tipo"], {}).get("necesita", []):
+		if furniture_in(room, need).is_empty():
+			out.append(catalog.get(need, {}).get("nombre", need))
+	return out
+
+
+## Por qué no se puede crear una habitación de este tipo en este rectángulo ("" si se puede).
+func room_problem(tipo: String, rect: Rect2i) -> String:
+	if not room_types.has(tipo):
+		return "Habitación desconocida"
+	var minimum := int(room_types[tipo]["minimo"])
+	if rect.size.x * rect.size.y < minimum:
+		return "Es muy pequeña: necesita al menos %d casillas" % minimum
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			if not buildable.has(Vector2i(x, y)):
+				return "Ahí no cabe: choca con la cocina, la puerta o un puesto del personal"
+	for r in rooms:
+		if r["rect"].intersects(rect):
+			return "Se solapa con otra habitación"
+	for t in tables:
+		if rect.has_point(t.cell) or t.seats.any(func(c: Vector2i): return rect.has_point(c)):
+			return "Hay mesas dentro: muévelas antes"
+	return ""
+
+
+func add_room(tipo: String, rect: Rect2i) -> int:
+	var id := _next_room_id
+	_next_room_id += 1
+	rooms.append({ "id": id, "tipo": tipo, "rect": rect })
+	return id
+
+
+## Por qué no se puede derribar la habitación ("" si se puede): antes hay que retirar su equipo.
+func room_removal_problem(room: Dictionary) -> String:
+	var needed := 0
+	for f in furniture_in(room):
+		if catalog.get(f["tipo"], {}).get("solo_en", "") == room["tipo"]:
+			needed += 1
+	return "" if needed == 0 else "Antes retira lo que hay dentro (%d mueble%s de la habitación)" % [needed, "" if needed == 1 else "s"]
+
+
+func remove_room(id: int) -> void:
+	rooms = rooms.filter(func(r: Dictionary): return r["id"] != id)
+
+
+## Casillas desde las que se usa cada mueble de equipo (delante del inodoro, del perchero...).
+func use_cells(room_tipo: String = "") -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for f in furniture:
+		var def: Dictionary = catalog.get(f["tipo"], {})
+		if not def.has("uso") or def.has("objeto"):
+			continue
+		if room_tipo != "" and def.get("solo_en", "") != room_tipo:
+			continue
+		out.append(f["celda"] + rotate_cell(v2i(def["uso"]), f["rot"]))
+	return out
+
+
+## Taburetes de las barras que funcionan (tienen mostrador).
+func bar_stools() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for room in rooms_of("barra"):
+		if room_ready(room):
+			for f in furniture_in(room, "taburete"):
+				out.append(f["celda"])
+	return out
+
+
+## Casillas de uso de las habitaciones de este tipo que funcionan.
+func working_use_cells(room_tipo: String) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for room in rooms_of(room_tipo):
+		if not room_ready(room):
+			continue
+		for f in furniture_in(room):
+			var def: Dictionary = catalog.get(f["tipo"], {})
+			if def.get("solo_en", "") == room_tipo and def.has("uso"):
+				out.append(f["celda"] + rotate_cell(v2i(def["uso"]), f["rot"]))
+	return out

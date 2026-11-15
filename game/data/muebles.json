@@ -63,5 +63,35 @@
 		"id": "macetero", "nombre": "Macetero largo", "categoria": "decoracion", "tipo": "decoracion",
 		"precio": 140, "ambiente": 4, "estilo": "macetero", "huella": [[0, 0], [1, 0]],
 		"descripcion": "Arbustos en fila para separar ambientes."
+	},
+	{
+		"id": "inodoro", "nombre": "Inodoro", "categoria": "equipo", "tipo": "decoracion", "solo_en": "aseos",
+		"precio": 220, "ambiente": 0, "estilo": "inodoro", "uso": [0, 1],
+		"descripcion": "Para los baños."
+	},
+	{
+		"id": "lavabo", "nombre": "Lavabo", "categoria": "equipo", "tipo": "decoracion", "solo_en": "aseos",
+		"precio": 160, "ambiente": 1, "estilo": "lavabo", "uso": [0, 1],
+		"descripcion": "Para los baños."
+	},
+	{
+		"id": "perchero", "nombre": "Perchero", "categoria": "equipo", "tipo": "decoracion", "solo_en": "ropero",
+		"precio": 90, "ambiente": 1, "estilo": "perchero", "uso": [0, 1],
+		"descripcion": "Para el ropero."
+	},
+	{
+		"id": "barra_bar", "nombre": "Barra del bar", "categoria": "equipo", "tipo": "decoracion", "solo_en": "barra",
+		"precio": 260, "ambiente": 2, "estilo": "barra_bar",
+		"descripcion": "Para la barra de bar."
+	},
+	{
+		"id": "taburete", "nombre": "Taburete", "categoria": "equipo", "tipo": "decoracion", "solo_en": "barra",
+		"precio": 60, "ambiente": 0, "estilo": "taburete", "taburete": true,
+		"descripcion": "Para la barra de bar."
+	},
+	{
+		"id": "ordenador", "nombre": "Escritorio con ordenador", "categoria": "equipo", "tipo": "decoracion", "solo_en": "despacho",
+		"precio": 700, "ambiente": 0, "estilo": "ordenador", "uso": [-1, 0], "objeto": "ordenador",
+		"descripcion": "Para el despacho."
 	}
 ]

@@ -187,8 +187,15 @@ Plan por pasos:
      pared; lámpara colgante (cuelga del techo, se puede poner sobre una mesa), sofá y
      macetero. De noche el cielo se oscurece, los cristales también y las luces cobran
      protagonismo.
-   - Pendiente: habitaciones con nombre y reglas (baños, ropero, barra...), puertas
-     interiores y paredes interiores.
+   - ✅ **Habitaciones**: se dibujan en el suelo (dos esquinas) y cuestan por casilla:
+     baños, ropero, barra de bar y despacho. Cada una necesita su equipo, que solo se puede
+     colocar dentro de ella (inodoro y lavabo, perchero, mostrador y taburetes, escritorio con
+     ordenador). El despacho de fábrica es una más y el ordenador es un mueble. Los clientes
+     las usan de verdad: van al baño mientras esperan o comen (sin baños se quejan y baja la
+     valoración), el que lidera el grupo deja los abrigos en el ropero, y los que esperan mesa
+     se sientan en la barra a tomar algo (dinero extra y más paciencia).
+   - Pendiente: paredes y puertas interiores (las habitaciones son zonas abiertas), más
+     reglas (aforo, limpieza de baños, camarero en la barra).
 4. **Nuevas necesidades**: aseos para clientes, sala de descanso para el personal.
 5. **Vida visual**: día y noche, luces, fachada y calle según el barrio, sonido.
 6. **Empezar de cero**: elegir un local vacío del barrio (tamaño, forma, precio) y montarlo.

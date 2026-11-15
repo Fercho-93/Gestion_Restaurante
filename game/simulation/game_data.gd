@@ -27,6 +27,8 @@ var locales: Dictionary = {}
 ## Suelos y paredes (estilos, ventanas y adornos) del modo construcción.
 var suelos: Dictionary = {}
 var paredes: Dictionary = {}
+## Tipos de habitación (baños, ropero, barra, despacho).
+var habitaciones: Dictionary = {}
 
 
 func _ready() -> void:
@@ -44,6 +46,7 @@ func load_all() -> void:
 	muebles = _by_id(_load_json("muebles.json"))
 	locales = _by_id(_load_json("locales.json"))
 	suelos = _by_id(_load_json("suelos.json"))
+	habitaciones = _by_id(_load_json("habitaciones.json"))
 	var walls = _load_json("paredes.json")
 	paredes = { "estilos": _by_id(walls["estilos"]), "aberturas": _by_id(walls["aberturas"]), "adornos": _by_id(walls["adornos"]) }
 	for error in validate():
@@ -56,7 +59,7 @@ func load_all() -> void:
 ## sobra y solo el personal imprescindible (un camarero y un cocinero).
 func sim_data(barrio_id: String = "", local_id: String = "") -> Dictionary:
 	var data := { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand, "muebles": muebles,
-			"acabados": { "suelos": suelos, "paredes": paredes } }
+			"acabados": { "suelos": suelos, "paredes": paredes, "habitaciones": habitaciones } }
 	if barrios.has(barrio_id):
 		data["barrio"] = barrios[barrio_id]
 		data["perfiles"] = perfiles

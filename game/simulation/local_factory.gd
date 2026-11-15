@@ -30,10 +30,9 @@ static func build(comedor_w: int, alto: int) -> Dictionary:
 			{ "nombre": "Despacho", "rect": [comedor_w, h - 2, BACK_WIDTH, 2], "color": "d9bf9b", "construible": true },
 		],
 		"objetos": [
-			{ "id": "ordenador", "nombre": "Ordenador", "celda": [comedor_w + 2, h - 1], "uso": [comedor_w + 1, h - 1] },
 			{ "id": "cafetera", "nombre": "Cafetera", "celda": [comedor_w, 1], "uso": [comedor_w - 1, 1], "sentado": false },
 		],
-		"muebles": [],
+		"muebles": [{ "tipo": "ordenador", "celda": [comedor_w + 2, h - 1] }],
 		"barra_cocina": counter,
 		"puerta_cocina": [comedor_w, kh - 1],
 		"obstaculos": [[comedor_w + 3, h - 2], [comedor_w + 3, h - 1]],

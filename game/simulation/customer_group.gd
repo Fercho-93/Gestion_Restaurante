@@ -87,6 +87,24 @@ var complained := false
 var shout_until := -1.0
 ## Vecino (Neighbor) que es cada miembro, o null (niños, clientes anónimos).
 var people: Array = []
+## Viaje al baño de un miembro: necesita ir (wc_need), quién (wc_member), "" / "yendo" /
+## "dentro" / "volviendo", la casilla a la que va y cuánto le queda dentro.
+var wc_need := false
+var wc_member := 0
+var wc_state := ""
+var wc_cell := Vector2i(-999, -999)
+var wc_timer := 0.0
+var wc_done := false
+## Quería ir al baño y no había.
+var wc_denied := false
+## Quien lidera el grupo deja los abrigos en el ropero: "" / "yendo" / "dejando" / "volviendo".
+var coat_state := ""
+var coat_cell := Vector2i(-999, -999)
+var coat_timer := 0.0
+## Esperan mesa sentados en la barra: sus taburetes y si ya han pedido algo.
+var at_bar := false
+var bar_cells: Array[Vector2i] = []
+var bar_paid := false
 
 
 func set_state(new_state: State) -> void:

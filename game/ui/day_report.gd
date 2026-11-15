@@ -15,6 +15,8 @@ const CATEGORY_NAMES := {
 	"muebles": "Muebles y decoración",
 	"venta_muebles": "Venta de muebles",
 	"suelos": "Suelos",
+	"obras": "Obras de habitaciones",
+	"barra": "Ventas de barra",
 	"paredes": "Paredes y ventanas",
 }
 
@@ -62,6 +64,8 @@ func show_report(r: Dictionary) -> void:
 	_line("Satisfacción media: %d/100 · Reputación: %.1f/5" % [roundi(r["satisfaccion_media"]), r["reputacion"]])
 	if r["platos_tirados"] > 0:
 		_line("Platos tirados: %d" % r["platos_tirados"], 24, Color("e57373"))
+	if r.get("sin_banos", 0) > 0:
+		_line("Clientes que buscaron los baños y no había: %d" % r["sin_banos"], 24, Color("e57373"))
 	for k in r["ingresos"]:
 		_line("+ %s: %s €" % [_category(k), _money(r["ingresos"][k])], 26, Color("81c784"))
 	for k in r["gastos"]:

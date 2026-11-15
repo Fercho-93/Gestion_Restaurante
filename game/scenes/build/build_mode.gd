@@ -6,7 +6,7 @@ extends Node3D
 
 signal changed
 
-enum Mode { NADA, COLOCANDO, ELEGIDO, PINTANDO, PARED }
+enum Mode { NADA, COLOCANDO, ELEGIDO, PINTANDO, PARED, HABITACION }
 
 const OK_COLOR := Color(0.3, 0.85, 0.4, 0.55)
 const BAD_COLOR := Color(0.95, 0.3, 0.3, 0.55)
@@ -27,6 +27,9 @@ var brush := "casilla"
 var wall_part := ""
 var wall_id := ""
 var wall_scope := "tramo"
+## Habitación que se dibuja ("" = derribar) y la primera esquina ya marcada.
+var room_type := ""
+var room_corner := Vector2i(-999, -999)
 ## Mueble del catálogo que se está colocando (nuevo o movido).
 var tipo := ""
 ## Mueble que se mueve o está elegido (-1 si es uno nuevo).
@@ -113,6 +116,20 @@ func choose_wall(part: String, id: String) -> void:
 	_set_mode(Mode.PARED)
 
 
+## Elegir una habitación para dibujarla (tipo "" = derribar la que se toque).
+func choose_room(tipo: String) -> void:
+	room_type = tipo
+	room_corner = Vector2i(-999, -999)
+	message = ""
+	if tipo != "":
+		var def: Dictionary = sim.layout.room_types[tipo]
+		var needs: Array[String] = []
+		for n in def["necesita"]:
+			needs.append(String(sim.layout.catalog.get(n, {}).get("nombre", n)).to_lower())
+		message = "%s: toca dos esquinas opuestas. Necesita: %s." % [def["nombre"], ", ".join(needs)]
+	_set_mode(Mode.HABITACION)
+
+
 func set_wall_scope(scope: String) -> void:
 	wall_scope = scope
 	_refresh()
@@ -120,6 +137,9 @@ func set_wall_scope(scope: String) -> void:
 
 ## Un toque en el local: mueve el fantasma, pinta, cambia una pared o elige el mueble tocado.
 func tap(screen_pos: Vector2) -> void:
+	if mode == Mode.HABITACION:
+		_tap_room(screen_pos)
+		return
 	if mode == Mode.PARED:
 		_tap_wall(screen_pos)
 		return
@@ -151,6 +171,32 @@ func tap(screen_pos: Vector2) -> void:
 	rot = f["rot"]
 	message = ""
 	_set_mode(Mode.ELEGIDO)
+
+
+## Dibujar una habitación: un toque marca una esquina y el siguiente la esquina opuesta.
+func _tap_room(screen_pos: Vector2) -> void:
+	var ground := camera.screen_to_ground(screen_pos)
+	var c := Vector2i(roundi(ground.x), roundi(ground.z))
+	if room_type == "":
+		var result := sim.remove_room_at(c)
+		message = "Habitación derribada." if result == "" else result
+		_refresh()
+		return
+	if room_corner == Vector2i(-999, -999):
+		room_corner = c
+		message = "Toca la esquina de enfrente para cerrar la habitación."
+		_refresh()
+		return
+	var cost := sim.room_cost(room_type, RestaurantLayout.rect_between(room_corner, c))
+	var result := sim.create_room(room_type, room_corner, c)
+	if result == "":
+		var def: Dictionary = sim.layout.room_types[room_type]
+		message = "%s creada%s. Ahora pon su equipo (pestaña Habitaciones)." % [def["nombre"], "" if sim.free_build else " (−%d €)" % int(cost)]
+		room_corner = Vector2i(-999, -999)
+	else:
+		message = result
+		room_corner = Vector2i(-999, -999)
+	_refresh()
 
 
 func _tap_floor(screen_pos: Vector2) -> void:
@@ -316,6 +362,9 @@ func _refresh() -> void:
 		_ghost.position = Vector3(cell.x, 0.02, cell.y)
 		add_child(_ghost)
 		_draw_footprint(OK_COLOR if problem == "" else BAD_COLOR)
+	elif mode == Mode.HABITACION:
+		if room_corner != Vector2i(-999, -999):
+			_tiles.add_child(_tile(room_corner, PICK_COLOR, 0.02))
 	elif mode == Mode.ELEGIDO:
 		var f := sim.layout.furniture_by_uid(uid)
 		if f.is_empty():

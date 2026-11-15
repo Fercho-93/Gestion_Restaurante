@@ -14,6 +14,7 @@ var sim: RestaurantSim
 var night := 0.0
 var _floor_root: Node3D
 var _wall_root: Node3D
+var _room_root: Node3D
 var _wall_mats := {}
 var _floor_mats := {}
 var _glass_mat: StandardMaterial3D
@@ -45,7 +46,10 @@ func setup(restaurant_sim: RestaurantSim) -> void:
 	_highlight.material_override = hm
 	_highlight.visible = false
 	add_child(_highlight)
+	_room_root = Node3D.new()
+	add_child(_room_root)
 	sim.finishes_changed.connect(rebuild)
+	sim.layout_changed.connect(_build_rooms)
 	rebuild()
 	set_night(0.0)
 
@@ -58,6 +62,7 @@ func rebuild() -> void:
 	_glows.clear()
 	_build_floors()
 	_build_walls()
+	_build_rooms()
 	set_night(night)
 
 
@@ -355,3 +360,63 @@ func highlight_wall(key: String) -> void:
 	(_highlight.mesh as BoxMesh).size = Vector3(1.0, H, 0.26) if side == "N" else Vector3(0.26, H, 1.0)
 	_highlight.position = _wpos(side, index, 0.0, H / 2.0, 0.0)
 	_highlight.visible = true
+
+
+# --- Habitaciones ------------------------------------------------------------------------
+
+## Cada habitación: suelo teñido con su color, cinta en el borde y un rótulo en el suelo
+## (en rojo si le falta equipo para funcionar).
+func _build_rooms() -> void:
+	if _room_root == null:
+		return
+	for child in _room_root.get_children():
+		child.queue_free()
+	var layout := sim.layout
+	for room in layout.rooms:
+		var def: Dictionary = layout.room_types.get(room["tipo"], {})
+		var color := Color(def.get("color", "cccccc"))
+		var rect: Rect2i = room["rect"]
+		var center := Vector3(rect.position.x + rect.size.x / 2.0 - 0.5, 0.0, rect.position.y + rect.size.y / 2.0 - 0.5)
+		var tint := MeshInstance3D.new()
+		var plane := PlaneMesh.new()
+		plane.size = Vector2(rect.size.x, rect.size.y)
+		tint.mesh = plane
+		tint.material_override = _flat(Color(color, 0.22))
+		tint.position = center + Vector3(0, 0.008, 0)
+		tint.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_room_root.add_child(tint)
+		var tape := _flat(Color(color.darkened(0.15), 0.9))
+		var x0 := rect.position.x - 0.5
+		var x1 := rect.end.x - 0.5
+		var z0 := rect.position.y - 0.5
+		var z1 := rect.end.y - 0.5
+		for edge in [[Vector3((x0 + x1) / 2.0, 0, z0), Vector3(rect.size.x, 0.012, 0.07)], [Vector3((x0 + x1) / 2.0, 0, z1), Vector3(rect.size.x, 0.012, 0.07)],
+				[Vector3(x0, 0, (z0 + z1) / 2.0), Vector3(0.07, 0.012, rect.size.y)], [Vector3(x1, 0, (z0 + z1) / 2.0), Vector3(0.07, 0.012, rect.size.y)]]:
+			var strip := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = edge[1]
+			strip.mesh = box
+			strip.material_override = tape
+			strip.position = edge[0] + Vector3(0, 0.01, 0)
+			strip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_room_root.add_child(strip)
+		var label := Label3D.new()
+		var missing := layout.room_missing(room)
+		label.text = def.get("nombre", "").to_upper() + ("" if missing.is_empty() else "\nfalta: " + ", ".join(missing).to_lower())
+		label.font_size = 40
+		label.pixel_size = 0.006
+		label.modulate = color.darkened(0.55) if missing.is_empty() else Color("b23b3b")
+		label.outline_size = 0
+		label.shaded = false
+		label.rotation = Vector3(-PI / 2.0, PI / 4.0, 0)
+		label.position = Vector3(rect.position.x - 0.35 + minf(1.1, rect.size.x / 2.0), 0.03, rect.end.y - 0.7)
+		_room_root.add_child(label)
+
+
+func _flat(color: Color) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if color.a < 1.0:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	return mat

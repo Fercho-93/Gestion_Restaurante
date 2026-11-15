@@ -392,35 +392,10 @@ func _build_coffee_machine() -> void:
 	_box(Vector3(0.1, 0.1, 0.1), base + Vector3(-0.2, 0.05, -0.05), Color("fafafa"))
 
 
-## Despacho: mesa con ordenador, silla del gestor, estantería y planta.
+## Despacho: estantería con libros y planta en las esquinas libres. (La mesa con el
+## ordenador es un mueble más y se dibuja con el resto.)
 func _build_office() -> void:
-	var layout := sim.layout
-	if not layout.objects.has("ordenador"):
-		return
-	var pc: Dictionary = layout.objects["ordenador"]
-	var desk := Vector3(pc["celda"].x, 0, pc["celda"].y)
-	var seat := Vector3(pc["uso"].x, 0, pc["uso"].y)
-	var toward := (desk - seat).normalized()
-	var side := Vector3(-toward.z, 0, toward.x)
-	_box(Vector3(0.8, 0.06, 0.8) if absf(toward.x) > 0.5 else Vector3(0.8, 0.06, 0.8), desk + Vector3(0, 0.46, 0), WOOD.lightened(0.15))
-	for corner in [Vector3(-0.33, 0, -0.33), Vector3(0.33, 0, -0.33), Vector3(-0.33, 0, 0.33), Vector3(0.33, 0, 0.33)]:
-		_box(Vector3(0.06, 0.44, 0.06), desk + corner + Vector3(0, 0.22, 0), WOOD.darkened(0.3))
-	# Pantalla mirando a la silla, con brillo.
-	var monitor_pos := desk + toward * 0.12 + Vector3(0, 0.68, 0)
-	var monitor_size := Vector3(0.05, 0.3, 0.46) if absf(toward.x) > 0.5 else Vector3(0.46, 0.3, 0.05)
-	_box(monitor_size, monitor_pos, Color("2a2d34"))
-	var screen := _box(monitor_size * Vector3(0.6, 0.85, 0.9) if absf(toward.x) > 0.5 else monitor_size * Vector3(0.9, 0.85, 0.6), monitor_pos - toward * 0.02, Color("7fc8f0"))
-	var screen_mat := screen.material_override as StandardMaterial3D
-	screen_mat.emission_enabled = true
-	screen_mat.emission = Color("7fc8f0")
-	screen_mat.emission_energy_multiplier = 0.8
-	_box(Vector3(0.08, 0.16, 0.08), desk + toward * 0.12 + Vector3(0, 0.55, 0), Color("2a2d34"))
-	_box(Vector3(0.3, 0.02, 0.12) if absf(toward.x) > 0.5 else Vector3(0.12, 0.02, 0.3), desk - toward * 0.15 + Vector3(0, 0.5, 0), Color("dfe3e8"))
-	# Silla de oficina.
-	_box(Vector3(0.38, 0.06, 0.38), seat + Vector3(0, 0.16, 0), Color("3b4a63"))
-	_box(Vector3(0.06, 0.4, 0.38) if absf(toward.x) > 0.5 else Vector3(0.38, 0.4, 0.06), seat - toward * 0.19 + Vector3(0, 0.36, 0), Color("3b4a63"))
-	# Estantería y planta en las esquinas libres del despacho.
-	for zone in layout.zones:
+	for zone in sim.layout.zones:
 		if zone["nombre"] != "Despacho":
 			continue
 		var r: Rect2i = zone["rect"]

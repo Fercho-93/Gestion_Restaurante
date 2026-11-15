@@ -14,7 +14,6 @@
 			{ "nombre": "Despacho", "rect": [8, 8, 4, 2], "color": "d9bf9b", "construible": true }
 		],
 		"objetos": [
-			{ "id": "ordenador", "nombre": "Ordenador", "celda": [10, 9], "uso": [9, 9] },
 			{ "id": "cafetera", "nombre": "Cafetera", "celda": [8, 1], "uso": [7, 1], "sentado": false }
 		],
 		"muebles": [
@@ -24,6 +23,7 @@
 			{ "tipo": "mesa_4", "celda": [5, 5] },
 			{ "tipo": "mesa_2", "celda": [2, 8] },
 			{ "tipo": "mesa_2", "celda": [5, 8] },
+			{ "tipo": "ordenador", "celda": [10, 9] },
 			{ "tipo": "ficus", "celda": [0, 0] },
 			{ "tipo": "lampara_pie", "celda": [9, 8] },
 			{ "tipo": "planta_pequena", "celda": [10, 8] }

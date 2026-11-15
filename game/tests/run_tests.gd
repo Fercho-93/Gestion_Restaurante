@@ -37,6 +37,7 @@ func _initialize() -> void:
 	test_cluttered_layout_never_gets_stuck()
 	test_buying_a_local()
 	test_floors_and_walls()
+	test_rooms()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1039,7 +1040,7 @@ func test_buying_a_local() -> void:
 		var left: float = float(data.NEW_GAME_MONEY - price)
 		check(sim.finances.money <= left and sim.finances.money > left - 2000.0, "%s: queda el presupuesto menos el local (y el primer pedido)" % local_id)
 		check(sim.waiters().size() == 1 and sim.cooks().size() == 1, "%s: un camarero y un cocinero" % local_id)
-		check(sim.layout.tables.is_empty() and sim.layout.furniture.is_empty(), "%s: el local viene vacío" % local_id)
+		check(sim.layout.tables.is_empty() and sim.layout.furniture.size() == 1 and sim.layout.objects.has("ordenador"), "%s: el local viene vacío, solo con el ordenador" % local_id)
 		check(not sim.fixed_costs.has("alquiler") and sim.fixed_costs.has("tasas"), "%s: en propiedad paga tasas, no alquiler" % local_id)
 		check(sim.layout.accessibility_problem() == "", "%s: el local vacío es accesible" % local_id)
 		check(sim.layout.size.x == int(comedor[0]) + 4, "%s: mide lo que dice su comedor" % local_id)
@@ -1119,3 +1120,98 @@ func test_floors_and_walls() -> void:
 	var fresh := RestaurantSim.new(data.sim_data("alternativo", "salon"), 9 * 60, 5)
 	check(fresh.layout.walls.size() == fresh.layout.size.x + fresh.layout.size.y - 3, "un local grande tiene sus paredes")
 	data.free()
+
+
+## Un local mediano vacío con las cuatro habitaciones montadas (y mesas en el resto).
+func _equipped_local(with_wc: bool, seed_value: int) -> RestaurantSim:
+	var data = load("res://simulation/game_data.gd").new()
+	data.load_all()
+	var sim := RestaurantSim.new(data.sim_data("universitario", "mediano"), 11 * 60, seed_value)
+	data.free()
+	sim.free_build = true
+	check(sim.create_room("ropero", Vector2i(0, 3), Vector2i(0, 4)) == "", "se crea el ropero")
+	check(sim.create_room("barra", Vector2i(1, 5), Vector2i(4, 5)) == "", "se crea la barra")
+	check(sim.buy_furniture("perchero", Vector2i(0, 3), 0) == "", "perchero")
+	check(sim.buy_furniture("barra_bar", Vector2i(1, 5), 0) == "" and sim.buy_furniture("barra_bar", Vector2i(2, 5), 0) == "", "mostrador de la barra")
+	check(sim.buy_furniture("taburete", Vector2i(3, 5), 0) == "" and sim.buy_furniture("taburete", Vector2i(4, 5), 0) == "", "taburetes")
+	if with_wc:
+		check(sim.create_room("aseos", Vector2i(0, 0), Vector2i(1, 1)) == "", "se crean los baños")
+		check(sim.buy_furniture("inodoro", Vector2i(0, 0), 0) == "" and sim.buy_furniture("lavabo", Vector2i(1, 0), 0) == "", "inodoro y lavabo")
+	var placed := 0
+	for y in range(1, 10):
+		for x in range(2, 7):
+			if placed < 3 and sim.buy_furniture("mesa_4", Vector2i(x, y), 0) == "":
+				placed += 1
+	check(placed >= 3, "caben mesas junto a las habitaciones (%d)" % placed)
+	check(sim.layout.accessibility_problem() == "", "todo sigue accesible")
+	sim.free_build = false
+	sim.finances.money = 50000.0
+	return sim
+
+
+func test_rooms() -> void:
+	var sim := RestaurantSim.new(load_data("alternativo"), 9 * 60, 5)
+	var layout := sim.layout
+	check(layout.rooms.size() == 1 and layout.rooms[0]["tipo"] == "despacho", "el despacho de fábrica es una habitación")
+	check(layout.room_ready(layout.rooms[0]) and layout.objects.has("ordenador"), "el despacho trae su ordenador")
+	# Crear habitaciones: reglas y precio.
+	var money := sim.finances.money
+	check(sim.create_room("aseos", Vector2i(3, 3), Vector2i(3, 3)) != "", "una casilla no basta para unos baños")
+	check(sim.create_room("aseos", Vector2i(9, 2), Vector2i(10, 3)) != "", "no se crea en la cocina")
+	check(sim.create_room("aseos", Vector2i(8, 8), Vector2i(9, 9)) != "", "ni encima del despacho")
+	check(sim.create_room("aseos", Vector2i(1, 1), Vector2i(2, 3)) != "", "ni encima de una mesa")
+	check(is_equal_approx(sim.finances.money, money), "lo que falla no se cobra")
+	# Los muebles de equipo solo van dentro de su habitación.
+	check(sim.build_problem("inodoro", Vector2i(0, 4), 0) != "", "un inodoro fuera de unos baños no vale")
+	check(sim.build_problem("mesa_2", Vector2i(9, 8), 0) != "", "las mesas no van en el despacho")
+	# Derribar: solo si no tiene equipo.
+	check(sim.remove_room_at(Vector2i(9, 8)) != "", "no se derriba el despacho con el ordenador dentro")
+	check(sim.remove_room_at(Vector2i(0, 4)) != "", "ni donde no hay habitación")
+	var rooms := _equipped_local(true, 7)
+	check(rooms.layout.rooms.size() == 4, "despacho, ropero, barra y baños (%d)" % rooms.layout.rooms.size())
+	var before := rooms.finances.money
+	check(rooms.create_room("aseos", Vector2i(0, 5), Vector2i(0, 6)) != "", "no se solapan habitaciones")
+	rooms.free_build = false
+	check(rooms.create_room("ropero", Vector2i(0, 8), Vector2i(0, 9)) != "", "no cabe en la recepción")
+	check(is_equal_approx(rooms.finances.money, before), "tampoco se cobra")
+	check(rooms.layout.room_ready(rooms.layout.rooms_of("aseos")[0]), "los baños tienen inodoro y lavabo")
+	var wc := rooms.layout.rooms_of("aseos")[0]
+	rooms.free_build = true
+	var sink: Dictionary = rooms.layout.furniture_in(wc, "lavabo")[0]
+	rooms.sell_furniture(sink["uid"])
+	check(not rooms.layout.room_ready(wc) and rooms.layout.room_missing(wc) == ["Lavabo"], "sin lavabo los baños no funcionan")
+	rooms.buy_furniture("lavabo", Vector2i(1, 0), 0)
+	# Una jornada: se usan los baños, el ropero y la barra.
+	var used_wc := 0
+	var used_coat := 0
+	var used_bar := 0
+	var seen := {}
+	var report := {}
+	rooms.day_closed.connect(func(r: Dictionary): report.merge(r))
+	rooms.free_build = false
+	while rooms.minutes < 24 * 60:
+		rooms.update(0.25)
+		for g in rooms.groups:
+			if g.wc_state != "" and not seen.has("w%d" % g.id):
+				seen["w%d" % g.id] = true
+				used_wc += 1
+			if g.coat_state != "" and not seen.has("c%d" % g.id):
+				seen["c%d" % g.id] = true
+				used_coat += 1
+			if g.at_bar and not seen.has("b%d" % g.id):
+				seen["b%d" % g.id] = true
+				used_bar += 1
+	var bar_sales: float = report.get("ingresos", {}).get("barra", 0.0)
+	print("Habitaciones en un día: baños %d, ropero %d, barra %d (ventas de barra %.1f €)" % [used_wc, used_coat, used_bar, bar_sales])
+	check(used_wc > 0, "los clientes van al baño")
+	check(used_coat > 0, "los clientes dejan el abrigo en el ropero")
+	check(used_bar > 0 and bar_sales > 0.0, "los que esperan mesa toman algo en la barra")
+	check(report.get("sin_banos", -1) == 0, "con baños nadie se queja de que no los haya")
+	check(rooms.groups.is_empty() or rooms.groups.all(func(g): return g.state != CustomerGroup.State.SALIENDO or g.state_time < 60.0), "nadie se queda atascado")
+	# Sin baños, la gente se queja.
+	var bare := _equipped_local(false, 7)
+	var bare_report := {}
+	bare.day_closed.connect(func(r: Dictionary): bare_report.merge(r))
+	while bare.minutes < 24 * 60:
+		bare.update(0.25)
+	check(bare_report.get("sin_banos", 0) > 0, "sin baños hay quien pregunta por ellos (%d)" % bare_report.get("sin_banos", 0))

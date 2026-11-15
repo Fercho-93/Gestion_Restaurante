@@ -69,6 +69,50 @@ static func build(def: Dictionary, rot: int = 0, ghost: bool = false) -> Node3D:
 			_glow(_box(root, Vector3(0.12, 0.16, 0.12), Vector3(0, 0.63, 0), WARM_LIGHT, ghost), ghost)
 			if not ghost:
 				_light(root, Vector3(0, 0.7, 0), 1.8, 0.6)
+		"inodoro":
+			var porcelain := Color("f4f6f7")
+			_box(root, Vector3(0.4, 0.5, 0.2), Vector3(0, 0.25, -0.3), porcelain, ghost)
+			_cyl(root, 0.2, 0.15, 0.3, Vector3(0, 0.2, -0.05), porcelain, ghost)
+			_cyl(root, 0.22, 0.22, 0.04, Vector3(0, 0.37, -0.05), Color("dfe5e8"), ghost)
+			_box(root, Vector3(0.1, 0.05, 0.05), Vector3(0, 0.53, -0.4), Color("b0bec5"), ghost)
+		"lavabo":
+			_box(root, Vector3(0.7, 0.55, 0.4), Vector3(0, 0.275, -0.25), Color("e9ecef"), ghost)
+			_box(root, Vector3(0.6, 0.06, 0.34), Vector3(0, 0.58, -0.25), Color("fbfbfb"), ghost)
+			_box(root, Vector3(0.05, 0.14, 0.05), Vector3(0, 0.68, -0.38), Color("b0bec5"), ghost)
+			_box(root, Vector3(0.5, 0.45, 0.04), Vector3(0, 1.05, -0.46), Color(0.78, 0.9, 0.96, 0.9), true if ghost else false)
+		"perchero":
+			_cyl(root, 0.18, 0.2, 0.06, Vector3(0, 0.03, 0), DARK_WOOD, ghost)
+			_cyl(root, 0.03, 0.03, 1.6, Vector3(0, 0.83, 0), DARK_WOOD, ghost)
+			for i in 3:
+				var coat: Color = [Color("37474f"), Color("8e3b46"), Color("5a7d9a")][i]
+				var a := i * TAU / 3.0
+				_box(root, Vector3(0.05, 0.05, 0.28), Vector3(sin(a) * 0.14, 1.5, cos(a) * 0.14), DARK_WOOD, ghost)
+				_box(root, Vector3(0.16, 0.5, 0.1), Vector3(sin(a) * 0.26, 1.2, cos(a) * 0.26), coat, ghost)
+		"barra_bar":
+			_box(root, Vector3(0.98, 0.9, 0.98), Vector3(0, 0.45, 0), DARK_WOOD, ghost)
+			_box(root, Vector3(1.0, 0.07, 1.0), Vector3(0, 0.93, 0), Color("c9a15a"), ghost)
+			_box(root, Vector3(0.98, 0.04, 0.3), Vector3(0, 0.99, 0.25), Color("e9d9b0"), ghost)
+		"taburete":
+			_cyl(root, 0.2, 0.2, 0.07, Vector3(0, 0.62, 0), VELVET, ghost)
+			for i in 4:
+				var a := i * TAU / 4.0 + PI / 4.0
+				_box(root, Vector3(0.04, 0.6, 0.04), Vector3(sin(a) * 0.14, 0.3, cos(a) * 0.14), Color("37474f"), ghost)
+		"ordenador":
+			# Mesa con ordenador mirando a la silla, que está en la casilla de uso (a la izquierda).
+			_box(root, Vector3(0.8, 0.06, 0.8), Vector3(0, 0.46, 0), WOOD.lightened(0.15), ghost)
+			for corner in [Vector3(-0.33, 0, -0.33), Vector3(0.33, 0, -0.33), Vector3(-0.33, 0, 0.33), Vector3(0.33, 0, 0.33)]:
+				_box(root, Vector3(0.06, 0.44, 0.06), corner + Vector3(0, 0.22, 0), DARK_WOOD, ghost)
+			_box(root, Vector3(0.05, 0.3, 0.46), Vector3(0.12, 0.68, 0), Color("2a2d34"), ghost)
+			var screen := _box(root, Vector3(0.03, 0.25, 0.4), Vector3(0.095, 0.68, 0), Color("7fc8f0"), ghost)
+			if not ghost:
+				var mat := screen.material_override as StandardMaterial3D
+				mat.emission_enabled = true
+				mat.emission = Color("7fc8f0")
+				mat.emission_energy_multiplier = 0.8
+			_box(root, Vector3(0.08, 0.16, 0.08), Vector3(0.12, 0.55, 0), Color("2a2d34"), ghost)
+			_box(root, Vector3(0.12, 0.02, 0.3), Vector3(-0.15, 0.5, 0), Color("dfe3e8"), ghost)
+			_box(root, Vector3(0.38, 0.06, 0.38), Vector3(-1, 0.16, 0), Color("3b4a63"), ghost)
+			_box(root, Vector3(0.06, 0.4, 0.38), Vector3(-1.19, 0.36, 0), Color("3b4a63"), ghost)
 		"colgante":
 			_cyl(root, 0.012, 0.012, 1.0, Vector3(0, 2.05, 0), Color("37474f"), ghost)
 			_cyl(root, 0.1, 0.24, 0.2, Vector3(0, 1.5, 0), Color("2b2f3a"), ghost)
