@@ -48,5 +48,20 @@
 		"id": "farolillo", "nombre": "Farolillo", "categoria": "luces", "tipo": "decoracion",
 		"precio": 70, "ambiente": 2, "estilo": "farolillo",
 		"descripcion": "Mesita con un farolillo encendido. Íntimo y barato."
+	},
+	{
+		"id": "colgante", "nombre": "Lámpara colgante", "categoria": "luces", "tipo": "decoracion",
+		"precio": 95, "ambiente": 3, "estilo": "colgante", "techo": true,
+		"descripcion": "Cuelga del techo y da una luz cálida sobre lo de abajo."
+	},
+	{
+		"id": "sofa", "nombre": "Sofá", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 380, "ambiente": 3, "estilo": "sofa", "huella": [[0, 0], [1, 0]],
+		"descripcion": "Un rincón cómodo para esperar."
+	},
+	{
+		"id": "macetero", "nombre": "Macetero largo", "categoria": "decoracion", "tipo": "decoracion",
+		"precio": 140, "ambiente": 4, "estilo": "macetero", "huella": [[0, 0], [1, 0]],
+		"descripcion": "Arbustos en fila para separar ambientes."
 	}
 ]

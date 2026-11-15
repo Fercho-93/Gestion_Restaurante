@@ -13,6 +13,8 @@ signal manager_started_talking(target: Dictionary)
 signal announcement(text: String, cell: Vector2i)
 ## Se han comprado, movido o vendido muebles.
 signal layout_changed
+## Cambian los suelos o las paredes (solo hay que redibujar el escenario).
+signal finishes_changed
 
 const MINUTES_PER_DAY := 24 * 60
 ## Hora a la que llega el pedido diario de materia prima.
@@ -93,7 +95,7 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 	ingredients = data["ingredients"]
 	recipes = data["recipes"]
 	var start: Dictionary = data["start"]
-	layout = RestaurantLayout.new(start["local"], data.get("muebles", {}))
+	layout = RestaurantLayout.new(start["local"], data.get("muebles", {}), data.get("acabados", {}))
 	demand = Demand.new(data["demand"])
 	finances = Finances.new(float(start["dinero_inicial"]))
 	opening_hour = int(start["hora_apertura"])
@@ -651,6 +653,51 @@ func sell_furniture(uid: int) -> String:
 	_bought_this_session.erase(uid)
 	layout.remove_furniture(uid)
 	_after_layout_change()
+	return ""
+
+
+## Lo que cuesta pintar estas casillas con este material (solo las que cambian).
+func floor_paint_cost(cells: Array, material: String) -> float:
+	var price := float(layout.floor_catalog.get(material, {}).get("precio", 0))
+	return price * layout.floor_changes(cells, material).size()
+
+
+## Pinta el suelo. Devuelve {problema, casillas, coste}; sin problema, ya está hecho.
+func paint_floor(cells: Array, material: String) -> Dictionary:
+	if not layout.floor_catalog.has(material):
+		return { "problema": "Material desconocido", "casillas": 0, "coste": 0.0 }
+	var changes := layout.floor_changes(cells, material)
+	if changes.is_empty():
+		return { "problema": "Ahí ya está puesto o no se puede pintar", "casillas": 0, "coste": 0.0 }
+	var cost := 0.0 if free_build else floor_paint_cost(changes, material)
+	if cost > finances.money:
+		return { "problema": "No hay dinero suficiente (cuesta %d €)" % int(cost), "casillas": 0, "coste": cost }
+	if cost > 0.0:
+		finances.spend("suelos", cost)
+	layout.set_floor(changes, material)
+	finishes_changed.emit()
+	return { "problema": "", "casillas": changes.size(), "coste": cost }
+
+
+func wall_part_price(part: String, id: String) -> float:
+	if id == "":
+		return 0.0
+	var group: String = { "estilo": "estilos", "abertura": "aberturas", "adorno": "adornos" }[part]
+	return float(layout.wall_catalog.get(group, {}).get(id, {}).get("precio", 0))
+
+
+## Cambia el estilo, la ventana o el adorno de un segmento de pared. "" si se hizo, o el motivo.
+func change_wall(key: String, part: String, id: String) -> String:
+	var problem := layout.wall_problem(key, part, id)
+	if problem != "":
+		return problem
+	var price := 0.0 if free_build else wall_part_price(part, id)
+	if price > finances.money:
+		return "No hay dinero suficiente (cuesta %d €)" % int(price)
+	if price > 0.0:
+		finances.spend("paredes", price)
+	layout.set_wall_part(key, part, id)
+	finishes_changed.emit()
 	return ""
 
 

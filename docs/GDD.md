@@ -176,6 +176,19 @@ Plan por pasos:
    averías.
 3. **Paredes, puertas, suelos** y detección de habitaciones (comedor, cocina, aseos,
    almacén, sala de personal).
+   - ✅ **Suelos**: 7 materiales con textura propia (vinílico, madera natural, tarima
+     laminada, microcemento, gres porcelánico, suelo de cocina y de oficina) que se pintan
+     por casilla, en 3×3 o por zona entera, con precio por casilla. Cada uno aporta ambiente
+     (el del comedor) y limpieza (la media del local) respecto a como viene de serie.
+   - ✅ **Paredes y ventanas**: pared del fondo y fachada cristalera, con 6 estilos (pintura,
+     ladrillo, azulejo, madera), 3 ventanas (pequeña, normal, ventanal) y adornos que se
+     cuelgan por tramos o en la pared entera. No cambian por dónde pasa la gente.
+   - ✅ **Iluminación y decoración**: cuadros, fotos, espejo, reloj, apliques y neón en la
+     pared; lámpara colgante (cuelga del techo, se puede poner sobre una mesa), sofá y
+     macetero. De noche el cielo se oscurece, los cristales también y las luces cobran
+     protagonismo.
+   - Pendiente: habitaciones con nombre y reglas (baños, ropero, barra...), puertas
+     interiores y paredes interiores.
 4. **Nuevas necesidades**: aseos para clientes, sala de descanso para el personal.
 5. **Vida visual**: día y noche, luces, fachada y calle según el barrio, sonido.
 6. **Empezar de cero**: elegir un local vacío del barrio (tamaño, forma, precio) y montarlo.

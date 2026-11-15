@@ -6,7 +6,7 @@ extends Node3D
 
 signal changed
 
-enum Mode { NADA, COLOCANDO, ELEGIDO }
+enum Mode { NADA, COLOCANDO, ELEGIDO, PINTANDO, PARED }
 
 const OK_COLOR := Color(0.3, 0.85, 0.4, 0.55)
 const BAD_COLOR := Color(0.95, 0.3, 0.3, 0.55)
@@ -17,6 +17,16 @@ var active := false
 var mode := Mode.NADA
 var sim: RestaurantSim
 var camera: IsoCamera
+## Suelos, paredes y ventanas del escenario (para señalar y elegir segmentos de pared).
+var finishes: RoomFinishes
+## Suelo con el que se pinta y tamaño del pincel: "casilla", "3x3" o "zona".
+var floor_material := ""
+var brush := "casilla"
+## Qué se pone en la pared: parte ("estilo", "abertura" o "adorno") e id ("" = quitar),
+## y si se aplica a un "tramo" o a la "pared" entera.
+var wall_part := ""
+var wall_id := ""
+var wall_scope := "tramo"
 ## Mueble del catálogo que se está colocando (nuevo o movido).
 var tipo := ""
 ## Mueble que se mueve o está elegido (-1 si es uno nuevo).
@@ -33,9 +43,10 @@ var _tiles: Node3D
 var _area: Node3D
 
 
-func setup(restaurant_sim: RestaurantSim, iso_camera: IsoCamera) -> void:
+func setup(restaurant_sim: RestaurantSim, iso_camera: IsoCamera, room_finishes: RoomFinishes = null) -> void:
 	sim = restaurant_sim
 	camera = iso_camera
+	finishes = room_finishes
 	_tiles = Node3D.new()
 	add_child(_tiles)
 	_area = Node3D.new()
@@ -63,6 +74,8 @@ func exit() -> void:
 	if not active:
 		return
 	active = false
+	if finishes != null:
+		finishes.highlight_wall("")
 	_area.visible = false
 	_set_mode(Mode.NADA)
 	Game.clock.set_speed(maxi(1, _speed_before))
@@ -80,8 +93,39 @@ func choose(new_tipo: String) -> void:
 	_set_mode(Mode.COLOCANDO)
 
 
-## Un toque en el local: mueve el fantasma, o elige el mueble tocado.
+## Elegir un suelo para pintar.
+func choose_floor(id: String) -> void:
+	floor_material = id
+	message = ""
+	_set_mode(Mode.PINTANDO)
+
+
+func set_brush(new_brush: String) -> void:
+	brush = new_brush
+	_refresh()
+
+
+## Elegir qué poner en las paredes ("estilo", "abertura" o "adorno"; id "" = quitar).
+func choose_wall(part: String, id: String) -> void:
+	wall_part = part
+	wall_id = id
+	message = ""
+	_set_mode(Mode.PARED)
+
+
+func set_wall_scope(scope: String) -> void:
+	wall_scope = scope
+	_refresh()
+
+
+## Un toque en el local: mueve el fantasma, pinta, cambia una pared o elige el mueble tocado.
 func tap(screen_pos: Vector2) -> void:
+	if mode == Mode.PARED:
+		_tap_wall(screen_pos)
+		return
+	if mode == Mode.PINTANDO:
+		_tap_floor(screen_pos)
+		return
 	var ground := camera.screen_to_ground(screen_pos)
 	var c := Vector2i(roundi(ground.x), roundi(ground.z))
 	if mode == Mode.COLOCANDO:
@@ -89,17 +133,83 @@ func tap(screen_pos: Vector2) -> void:
 		message = ""
 		_refresh()
 		return
-	var f := sim.layout.furniture_at(c)
-	if f.is_empty():
+	var here := sim.layout.furniture_all_at(c)
+	if here.is_empty():
 		message = "Ahí no hay ningún mueble. Elige uno abajo para comprarlo."
 		_set_mode(Mode.NADA)
 		return
+	# Si hay dos cosas en la casilla (una mesa y una lámpara colgante), tocar otra vez pasa a la siguiente.
+	var f: Dictionary = here[0]
+	if mode == Mode.ELEGIDO:
+		for i in here.size():
+			if here[i]["uid"] == uid:
+				f = here[(i + 1) % here.size()]
+				break
 	uid = f["uid"]
 	tipo = f["tipo"]
 	cell = f["celda"]
 	rot = f["rot"]
 	message = ""
 	_set_mode(Mode.ELEGIDO)
+
+
+func _tap_floor(screen_pos: Vector2) -> void:
+	if finishes != null and finishes.pick_wall(camera, screen_pos) != "":
+		message = "Eso es una pared. Toca el suelo para pintarlo."
+		_refresh()
+		return
+	var ground := camera.screen_to_ground(screen_pos)
+	var c := Vector2i(roundi(ground.x), roundi(ground.z))
+	var cells: Array = []
+	match brush:
+		"zona":
+			cells = sim.layout.zone_floor_cells(c)
+		"3x3":
+			for dx in range(-1, 2):
+				for dy in range(-1, 2):
+					cells.append(c + Vector2i(dx, dy))
+		_:
+			cells = [c]
+	if not sim.layout.floor_paintable(c):
+		message = "Ahí no se puede pintar el suelo."
+		_refresh()
+		return
+	var result := sim.paint_floor(cells, floor_material)
+	if result["problema"] != "":
+		message = result["problema"]
+	else:
+		var cost: float = result["coste"]
+		message = "Pintado: %d casillas%s." % [result["casillas"], "" if cost <= 0.0 else " (−%d €)" % int(cost)]
+	_refresh()
+
+
+func _tap_wall(screen_pos: Vector2) -> void:
+	var key := finishes.pick_wall(camera, screen_pos) if finishes != null else ""
+	if key == "":
+		message = "Toca una pared para cambiarla."
+		_refresh()
+		return
+	var keys: Array[String] = [key]
+	if wall_scope == "pared":
+		keys = sim.layout.wall_keys(key.substr(0, 1))
+	var done := 0
+	var spent := 0.0
+	var first_problem := ""
+	for k in keys:
+		var price := 0.0 if sim.free_build else sim.wall_part_price(wall_part, wall_id)
+		var problem := sim.change_wall(k, wall_part, wall_id)
+		if problem == "":
+			done += 1
+			spent += price
+		elif first_problem == "" and not (keys.size() > 1 and problem in ["Ya está puesto", "No hay nada que quitar", "Ahí hay una ventana", "Quita antes lo que cuelga de esa pared"]):
+			first_problem = problem
+	if done == 0:
+		message = first_problem if first_problem != "" else "Ahí no se puede."
+	else:
+		message = "Hecho en %d tramo%s%s." % [done, "" if done == 1 else "s", "" if spent <= 0.0 else " (−%d €)" % int(spent)]
+	if finishes != null:
+		finishes.highlight_wall(key)
+	_refresh()
 
 
 func turn() -> void:
@@ -180,6 +290,8 @@ func _set_mode(new_mode: Mode) -> void:
 	mode = new_mode
 	if mode == Mode.NADA:
 		uid = -1
+	if finishes != null and mode != Mode.PARED:
+		finishes.highlight_wall("")
 	_refresh()
 
 

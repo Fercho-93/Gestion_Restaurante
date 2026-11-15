@@ -1,0 +1,135 @@
+{
+	"estilos": [
+		{
+			"id": "crema",
+			"nombre": "Pintura crema",
+			"precio": 0,
+			"ambiente": 0,
+			"color": "f3e6d3",
+			"descripcion": "El color de siempre."
+		},
+		{
+			"id": "azul",
+			"nombre": "Pintura azul",
+			"precio": 12,
+			"ambiente": 0,
+			"color": "b9d2ea",
+			"descripcion": "Fresca y luminosa."
+		},
+		{
+			"id": "salvia",
+			"nombre": "Pintura verde salvia",
+			"precio": 12,
+			"ambiente": 1,
+			"color": "c4d8bf",
+			"descripcion": "Verde suave, relajante."
+		},
+		{
+			"id": "ladrillo",
+			"nombre": "Ladrillo visto",
+			"precio": 30,
+			"ambiente": 2,
+			"color": "b5654a",
+			"descripcion": "Aire de taberna con mucho carácter."
+		},
+		{
+			"id": "azulejo",
+			"nombre": "Azulejo blanco",
+			"precio": 28,
+			"ambiente": 1,
+			"color": "f2f4f5",
+			"descripcion": "Limpio y clásico."
+		},
+		{
+			"id": "madera",
+			"nombre": "Panelado de madera",
+			"precio": 45,
+			"ambiente": 3,
+			"color": "a8764a",
+			"descripcion": "Listones de madera, muy acogedor."
+		}
+	],
+	"aberturas": [
+		{
+			"id": "ventana_pequena",
+			"nombre": "Ventana pequeña",
+			"precio": 60,
+			"ambiente": 0.5,
+			"descripcion": "Un ventanuco alto."
+		},
+		{
+			"id": "ventana",
+			"nombre": "Ventana",
+			"precio": 90,
+			"ambiente": 1,
+			"descripcion": "Ventana normal con marco."
+		},
+		{
+			"id": "ventanal",
+			"nombre": "Ventanal",
+			"precio": 240,
+			"ambiente": 3,
+			"descripcion": "Cristalera hasta el suelo: mucha luz."
+		}
+	],
+	"adornos": [
+		{
+			"id": "cuadro_paisaje",
+			"nombre": "Cuadro paisaje",
+			"categoria": "cuadros",
+			"precio": 45,
+			"ambiente": 2,
+			"descripcion": "Un paisaje al atardecer."
+		},
+		{
+			"id": "cuadro_abstracto",
+			"nombre": "Cuadro abstracto",
+			"categoria": "cuadros",
+			"precio": 60,
+			"ambiente": 2,
+			"descripcion": "Colores y formas."
+		},
+		{
+			"id": "fotos",
+			"nombre": "Fotos enmarcadas",
+			"categoria": "cuadros",
+			"precio": 35,
+			"ambiente": 1,
+			"descripcion": "Tres fotos del barrio."
+		},
+		{
+			"id": "espejo",
+			"nombre": "Espejo",
+			"categoria": "cuadros",
+			"precio": 90,
+			"ambiente": 2,
+			"descripcion": "Da amplitud al local."
+		},
+		{
+			"id": "reloj",
+			"nombre": "Reloj de pared",
+			"categoria": "cuadros",
+			"precio": 40,
+			"ambiente": 1,
+			"descripcion": "Para que nadie pierda la hora."
+		},
+		{
+			"id": "aplique",
+			"nombre": "Aplique de pared",
+			"categoria": "luces",
+			"precio": 65,
+			"ambiente": 2,
+			"luz": true,
+			"descripcion": "Luz cálida sobre la pared."
+		},
+		{
+			"id": "neon",
+			"nombre": "Letrero de neón",
+			"categoria": "luces",
+			"precio": 110,
+			"ambiente": 3,
+			"luz": true,
+			"descripcion": "Un letrero rosa que anima el local."
+		}
+	]
+}

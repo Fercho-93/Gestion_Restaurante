@@ -1,0 +1,65 @@
+[
+	{
+		"id": "vinilico",
+		"nombre": "Vinílico",
+		"precio": 6,
+		"ambiente": 0,
+		"limpieza": 3,
+		"brillo": 0.5,
+		"descripcion": "Baldosas de vinilo crema. Baratas, cómodas y fáciles de limpiar."
+	},
+	{
+		"id": "madera_natural",
+		"nombre": "Madera natural",
+		"precio": 24,
+		"ambiente": 5,
+		"limpieza": -2,
+		"brillo": 0.45,
+		"descripcion": "Tablas de madera con veta. Cálida y elegante, pero cuesta más mantenerla."
+	},
+	{
+		"id": "tarima",
+		"nombre": "Tarima laminada",
+		"precio": 14,
+		"ambiente": 3,
+		"limpieza": -1,
+		"brillo": 0.4,
+		"descripcion": "Tarima clara que imita al roble. Bonita y a buen precio."
+	},
+	{
+		"id": "microcemento",
+		"nombre": "Microcemento",
+		"precio": 18,
+		"ambiente": 3,
+		"limpieza": 1,
+		"brillo": 0.7,
+		"descripcion": "Gris continuo y moderno, sin juntas."
+	},
+	{
+		"id": "gres",
+		"nombre": "Gres porcelánico",
+		"precio": 16,
+		"ambiente": 3,
+		"limpieza": 4,
+		"brillo": 0.3,
+		"descripcion": "Baldosa grande con vetas de mármol. Resistente y fácil de limpiar."
+	},
+	{
+		"id": "cocina",
+		"nombre": "Suelo de cocina",
+		"precio": 10,
+		"ambiente": -3,
+		"limpieza": 6,
+		"brillo": 0.35,
+		"descripcion": "Baldosín antideslizante: lo más higiénico, aunque nada acogedor."
+	},
+	{
+		"id": "oficina",
+		"nombre": "Suelo de oficina",
+		"precio": 9,
+		"ambiente": -1,
+		"limpieza": -3,
+		"brillo": 0.95,
+		"descripcion": "Moqueta en losetas. Silenciosa, pero se ensucia con facilidad."
+	}
+]

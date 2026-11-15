@@ -55,12 +55,27 @@ var obstacles: Array[Vector2i] = []
 ## Ambiente del local (0-100): el del local vacío más lo que aporta cada mueble.
 var ambiente: float
 var ambiente_base: float
+## Limpieza del local: la base más lo que aportan los suelos.
 var limpieza: float
+var limpieza_base: float
 ## Catálogo de muebles: id -> datos (de muebles.json).
 var catalog: Dictionary = {}
 ## Muebles colocados: {uid, tipo, celda: Vector2i, rot: 0-3}
 var furniture: Array[Dictionary] = []
 var kitchen_door := Vector2i(-999, -999)
+## Acabados: suelos (celda -> id del material) y paredes (clave -> {estilo, abertura, adorno}).
+## Las paredes son la del fondo ("N" + columna) y la de la fachada a la calle ("O" + fila,
+## salvo la puerta). Son solo decoración: no cambian por dónde pasa la gente.
+var floor_catalog: Dictionary = {}
+var wall_catalog: Dictionary = {}
+var floors := {}
+var walls := {}
+## Filas de la fachada que son la puerta (no se pueden editar).
+var door_rows: Array[int] = []
+var _furniture_ambience := 0.0
+var _ref_floor_ambience := 0.0
+var _ref_floor_cleanliness := 0.0
+var _ref_wall_ambience := 0.0
 ## Celdas donde se pueden poner muebles: celda -> true
 var buildable := {}
 ## Celdas que deben quedar libres (puestos, pase, recepción, usos de objetos...): celda -> true
@@ -74,8 +89,17 @@ var astar := AStarGrid2D.new()
 var _sittable := {}
 
 
-func _init(d: Dictionary, furniture_catalog: Dictionary = {}) -> void:
+const DEFAULT_FLOORS := { "Comedor": "vinilico", "Cocina": "cocina", "Almacén": "cocina", "Despacho": "oficina" }
+const DEFAULT_WALL := "crema"
+const DEFAULT_WINDOW := "ventana"
+const WALL_HEIGHT := 1.6
+
+
+## `finishes`: {suelos: id -> datos, paredes: {estilos, aberturas, adornos}} (de los JSON).
+func _init(d: Dictionary, furniture_catalog: Dictionary = {}, finishes: Dictionary = {}) -> void:
 	catalog = furniture_catalog
+	floor_catalog = finishes.get("suelos", {})
+	wall_catalog = finishes.get("paredes", {})
 	size = v2i(d["tamano"])
 	region = Rect2i(-STREET_WIDTH, 0, size.x + STREET_WIDTH, size.y)
 	spawn_cell = v2i(d["aparicion"])
@@ -92,6 +116,7 @@ func _init(d: Dictionary, furniture_catalog: Dictionary = {}) -> void:
 	if d.has("puerta_cocina"):
 		kitchen_door = v2i(d["puerta_cocina"])
 	limpieza = float(d["limpieza"])
+	limpieza_base = limpieza
 	for c in d["cola"]:
 		queue_cells.append(v2i(c))
 	for c in d["puestos_cocina"]:
@@ -113,6 +138,7 @@ func _init(d: Dictionary, furniture_catalog: Dictionary = {}) -> void:
 			"construible": z.get("construible", false),
 		})
 	_find_buildable_cells()
+	_init_finishes()
 	for m in d.get("muebles", []):
 		furniture.append({ "uid": _next_uid, "tipo": m["tipo"], "celda": v2i(m["celda"]), "rot": int(m.get("rot", 0)) })
 		_next_uid += 1
@@ -159,7 +185,8 @@ func footprint(tipo: String, cell: Vector2i, rot: int) -> Dictionary:
 	var def: Dictionary = catalog.get(tipo, {})
 	var solid: Array[Vector2i] = []
 	var seats: Array[Vector2i] = []
-	for c in def.get("huella", [[0, 0]]):
+	# Lo que cuelga del techo no ocupa el suelo.
+	for c in (def.get("huella", [[0, 0]]) if not def.get("techo", false) else []):
 		solid.append(cell + rotate_cell(v2i(c), rot))
 	if def.get("tipo", "") == "mesa":
 		for offset in SEAT_OFFSETS[int(def["plazas"])]:
@@ -176,11 +203,18 @@ func furniture_by_uid(uid: int) -> Dictionary:
 
 ## Mueble que ocupa esta celda (contando las sillas de las mesas), o {}.
 func furniture_at(cell: Vector2i) -> Dictionary:
+	var all := furniture_all_at(cell)
+	return all[0] if not all.is_empty() else {}
+
+
+## Todos los muebles de esta celda: el de abajo y lo que cuelga del techo encima.
+func furniture_all_at(cell: Vector2i) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
 	for f in furniture:
 		var fp := footprint(f["tipo"], f["celda"], f["rot"])
-		if fp["solid"].has(cell) or fp["seats"].has(cell):
-			return f
-	return {}
+		if fp["solid"].has(cell) or fp["seats"].has(cell) or (catalog.get(f["tipo"], {}).get("techo", false) and f["celda"] == cell):
+			out.append(f)
+	return out
 
 
 ## ¿Se puede poner (o mover) este mueble aquí? Devuelve "" si sí, o el motivo si no.
@@ -189,6 +223,11 @@ func placement_problem(tipo: String, cell: Vector2i, rot: int, ignore_uid: int =
 	if not catalog.has(tipo):
 		return "Mueble desconocido"
 	var fp := footprint(tipo, cell, rot)
+	if catalog[tipo].get("techo", false):
+		# Colgar algo del techo: vale cualquier casilla del comedor o del despacho.
+		if not buildable.has(cell) and not _is_hangable(cell):
+			return "Aquí no se puede colgar"
+		return ""
 	var taken := {}
 	for f in furniture:
 		if f["uid"] == ignore_uid:
@@ -280,10 +319,10 @@ func _rebuild() -> void:
 		old[t.uid] = t
 	tables.clear()
 	obstacles = _fixed_obstacles.duplicate()
-	ambiente = ambiente_base
+	_furniture_ambience = 0.0
 	for f in furniture:
 		var def: Dictionary = catalog.get(f["tipo"], {})
-		ambiente += float(def.get("ambiente", 0))
+		_furniture_ambience += float(def.get("ambiente", 0))
 		var fp := footprint(f["tipo"], f["celda"], f["rot"])
 		if def.get("tipo", "") == "mesa":
 			var table: Table = old.get(f["uid"], Table.new())
@@ -294,7 +333,7 @@ func _rebuild() -> void:
 			tables.append(table)
 		else:
 			obstacles.append_array(fp["solid"])
-	ambiente = clampf(ambiente, 0.0, 100.0)
+	_recompute_finish_effects()
 	_build_navigation()
 	for t in tables:
 		t.service_cell = _service_cell_for(t)
@@ -406,3 +445,170 @@ func zone_name_at(cell: Vector2i) -> String:
 
 static func v2i(a: Array) -> Vector2i:
 	return Vector2i(int(a[0]), int(a[1]))
+
+
+# --- Acabados: suelos y paredes ------------------------------------------------------------
+
+func _is_hangable(cell: Vector2i) -> bool:
+	for zone in zones:
+		if zone["rect"].has_point(cell) and not zone["bloqueada"] and zone["nombre"] != "Cocina":
+			return true
+	return false
+
+
+func _init_finishes() -> void:
+	if floor_catalog.is_empty():
+		return
+	for zone in zones:
+		var id: String = DEFAULT_FLOORS.get(zone["nombre"], "vinilico")
+		if not floor_catalog.has(id):
+			continue
+		var r: Rect2i = zone["rect"]
+		for x in range(r.position.x, r.end.x):
+			for y in range(r.position.y, r.end.y):
+				floors[Vector2i(x, y)] = id
+	var style := DEFAULT_WALL if wall_catalog.get("estilos", {}).has(DEFAULT_WALL) else ""
+	if style == "":
+		return
+	door_rows.clear()
+	for dy in range(-1, 2):
+		door_rows.append(maxi(reception_cell.y + dy, 0))
+	for x in size.x:
+		walls["N%d" % x] = { "estilo": style, "abertura": "", "adorno": "" }
+		if wall_catalog["aberturas"].has(DEFAULT_WINDOW) and x % 3 == 1 and absf(x - size.x * 0.55) > 2.2:
+			walls["N%d" % x]["abertura"] = DEFAULT_WINDOW
+	# La fachada es una cristalera: deja ver la calle y la cola desde dentro.
+	var shopfront := "ventanal" if wall_catalog["aberturas"].has("ventanal") else ""
+	for z in size.y:
+		if not door_rows.has(z):
+			walls["O%d" % z] = { "estilo": style, "abertura": shopfront, "adorno": "" }
+	var ambience := _wall_ambience()
+	_ref_wall_ambience = ambience
+	_ref_floor_ambience = _floor_ambience()
+	_ref_floor_cleanliness = _floor_cleanliness()
+
+
+## ¿Se puede pintar esta casilla? (solo el interior, no el almacén)
+func floor_paintable(cell: Vector2i) -> bool:
+	if not floors.has(cell):
+		return false
+	for zone in zones:
+		if zone["rect"].has_point(cell):
+			return not zone["bloqueada"]
+	return false
+
+
+## Cambia el suelo de estas casillas (las no pintables se ignoran). Devuelve cuántas cambian.
+func set_floor(cells: Array, material: String) -> int:
+	var changed := 0
+	for c in cells:
+		if floor_paintable(c) and floors[c] != material:
+			floors[c] = material
+			changed += 1
+	if changed > 0:
+		_recompute_finish_effects()
+	return changed
+
+
+## Casillas que cambiarían de material si se pintaran con `material`.
+func floor_changes(cells: Array, material: String) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for c in cells:
+		if floor_paintable(c) and floors[c] != material:
+			out.append(c)
+	return out
+
+
+## Todas las casillas pintables de la zona (comedor, cocina o despacho) que contiene `cell`.
+func zone_floor_cells(cell: Vector2i) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for zone in zones:
+		if zone["rect"].has_point(cell) and not zone["bloqueada"]:
+			var r: Rect2i = zone["rect"]
+			for x in range(r.position.x, r.end.x):
+				for y in range(r.position.y, r.end.y):
+					out.append(Vector2i(x, y))
+	return out
+
+
+## Segmentos de pared de un lado ("N" o "O") en orden.
+func wall_keys(side: String) -> Array[String]:
+	var out: Array[String] = []
+	var count := size.x if side == "N" else size.y
+	for i in count:
+		if walls.has("%s%d" % [side, i]):
+			out.append("%s%d" % [side, i])
+	return out
+
+
+## Por qué no se puede poner `id` en la parte `part` ("estilo", "abertura" o "adorno") de este
+## segmento. "" si se puede; con id "" se quita lo que haya.
+func wall_problem(key: String, part: String, id: String) -> String:
+	if not walls.has(key):
+		return "Ahí no se puede" if not (key.begins_with("O") and door_rows.has(int(key.substr(1)))) else "Es la puerta del local"
+	var seg: Dictionary = walls[key]
+	if id == "":
+		return "No hay nada que quitar" if part == "estilo" or seg[part] == "" else ""
+	if seg[part] == id:
+		return "Ya está puesto"
+	if part == "abertura" and seg["adorno"] != "":
+		return "Quita antes lo que cuelga de esa pared"
+	if part == "adorno" and seg["abertura"] != "":
+		return "Ahí hay una ventana"
+	return ""
+
+
+func set_wall_part(key: String, part: String, id: String) -> void:
+	if not walls.has(key):
+		return
+	walls[key][part] = id
+	_recompute_finish_effects()
+
+
+## Aportación de los suelos: ambiente medio del comedor y limpieza media de todo el local,
+## respecto a como viene de serie.
+func _floor_ambience() -> float:
+	var total := 0.0
+	var count := 0
+	for zone in zones:
+		if zone["nombre"] != "Comedor":
+			continue
+		var r: Rect2i = zone["rect"]
+		for x in range(r.position.x, r.end.x):
+			for y in range(r.position.y, r.end.y):
+				total += float(floor_catalog.get(floors.get(Vector2i(x, y), ""), {}).get("ambiente", 0))
+				count += 1
+	return total / count if count > 0 else 0.0
+
+
+func _floor_cleanliness() -> float:
+	var total := 0.0
+	var count := 0
+	for c in floors:
+		if floor_paintable(c):
+			total += float(floor_catalog.get(floors[c], {}).get("limpieza", 0))
+			count += 1
+	return total / count if count > 0 else 0.0
+
+
+func _wall_ambience() -> float:
+	var styles: Dictionary = wall_catalog.get("estilos", {})
+	var total := 0.0
+	var style_total := 0.0
+	for key in walls:
+		var seg: Dictionary = walls[key]
+		style_total += float(styles.get(seg["estilo"], {}).get("ambiente", 0))
+		total += float(wall_catalog.get("aberturas", {}).get(seg["abertura"], {}).get("ambiente", 0))
+		total += float(wall_catalog.get("adornos", {}).get(seg["adorno"], {}).get("ambiente", 0))
+	# El estilo cuenta como media de la pared (hasta +3 con todo de lo mejor).
+	return total + (style_total / walls.size() if not walls.is_empty() else 0.0)
+
+
+func _recompute_finish_effects() -> void:
+	var extra := 0.0
+	var clean := 0.0
+	if not floor_catalog.is_empty():
+		extra = (_floor_ambience() - _ref_floor_ambience) + (_wall_ambience() - _ref_wall_ambience)
+		clean = _floor_cleanliness() - _ref_floor_cleanliness
+	ambiente = clampf(ambiente_base + _furniture_ambience + extra, 0.0, 100.0)
+	limpieza = clampf(limpieza_base + clean, 0.0, 100.0)

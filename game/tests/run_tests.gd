@@ -36,6 +36,7 @@ func _initialize() -> void:
 	test_build_furniture()
 	test_cluttered_layout_never_gets_stuck()
 	test_buying_a_local()
+	test_floors_and_walls()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1058,4 +1059,63 @@ func test_buying_a_local() -> void:
 	# Sin local elegido todo sigue como antes.
 	var classic := RestaurantSim.new(data.sim_data("alternativo"), 9 * 60, 5)
 	check(classic.property_local.is_empty() and classic.fixed_costs.has("alquiler"), "sin comprar local, paga alquiler")
+	data.free()
+
+
+func test_floors_and_walls() -> void:
+	var sim := RestaurantSim.new(load_data("alternativo"), 9 * 60, 5)
+	var layout := sim.layout
+	check(not layout.floors.is_empty() and not layout.walls.is_empty(), "el local tiene suelos y paredes de serie")
+	check(layout.walls.size() == layout.size.x + layout.size.y - layout.door_rows.size(), "un segmento por tramo de pared, sin la puerta")
+	var ambience := layout.ambiente
+	var cleanliness := layout.limpieza
+	var money := sim.finances.money
+	# Pintar el comedor entero con madera: cuesta por casilla, sube el ambiente y baja la limpieza.
+	var comedor := layout.zone_floor_cells(Vector2i(3, 3))
+	var price := float(layout.floor_catalog["madera_natural"]["precio"])
+	check(is_equal_approx(sim.floor_paint_cost(comedor, "madera_natural"), price * comedor.size()), "pintar cuesta por casilla")
+	var result := sim.paint_floor(comedor, "madera_natural")
+	check(result["problema"] == "" and result["casillas"] == comedor.size(), "se pinta todo el comedor")
+	check(is_equal_approx(sim.finances.money, money - price * comedor.size()), "se paga el suelo")
+	check(is_equal_approx(layout.ambiente, ambience + 5.0), "la madera natural sube el ambiente del comedor")
+	check(layout.limpieza < cleanliness, "la madera natural cuesta más de limpiar")
+	check(sim.paint_floor(comedor, "madera_natural")["problema"] != "", "no se paga por repintar lo mismo")
+	# El suelo de cocina en el comedor lo afea; y vale un material en cada zona.
+	sim.paint_floor(comedor, "cocina")
+	check(layout.ambiente < ambience, "un suelo de cocina en el comedor resta ambiente")
+	check(sim.paint_floor([Vector2i(9, 7)], "gres")["problema"] != "", "el almacén no se pinta")
+	check(sim.paint_floor([Vector2i(-1, 3)], "gres")["problema"] != "", "la calle no se pinta")
+	sim.finances.money = 1.0
+	check(sim.paint_floor(comedor, "gres")["problema"].begins_with("No hay dinero"), "sin dinero no se pinta")
+	sim.free_build = true
+	check(sim.paint_floor(comedor, "gres")["problema"] == "" and is_equal_approx(sim.finances.money, 1.0), "en modo libre es gratis")
+	sim.free_build = false
+	sim.finances.money = money
+	# Paredes: estilos, ventanas y adornos, con sus reglas.
+	var amb := layout.ambiente
+	check(sim.change_wall("N0", "adorno", "espejo") == "", "se cuelga un espejo")
+	check(layout.ambiente > amb, "el espejo sube el ambiente")
+	check(sim.change_wall("N0", "abertura", "ventana") != "", "no hay ventana donde cuelga algo")
+	check(sim.change_wall("N1", "adorno", "reloj") != "", "no se cuelga nada donde hay una ventana")
+	check(sim.change_wall("N0", "adorno", "") == "" and layout.walls["N0"]["adorno"] == "", "se descuelga")
+	check(sim.change_wall("N0", "adorno", "") != "", "no hay nada que quitar")
+	var before := sim.finances.money
+	check(sim.change_wall("N2", "estilo", "ladrillo") == "" and is_equal_approx(sim.finances.money, before - 30.0), "pintar un tramo cuesta su precio")
+	check(sim.change_wall("O%d" % layout.door_rows[0], "estilo", "ladrillo") != "", "la puerta no se toca")
+	var windows := layout.ambiente
+	check(sim.change_wall("O0", "abertura", "") == "", "se tapia una cristalera")
+	check(layout.ambiente < windows, "menos ventanas, menos ambiente")
+	# Lo que cuelga del techo no ocupa el suelo y se puede poner sobre una mesa.
+	sim.free_build = true
+	var table_cell: Vector2i = layout.tables[0].cell
+	check(sim.buy_furniture("colgante", table_cell, 0) == "", "una lámpara colgante sobre la mesa")
+	check(layout.furniture_all_at(table_cell).size() == 2, "la mesa y la lámpara están en la misma casilla")
+	check(sim.buy_furniture("colgante", Vector2i(-1, 3), 0) != "", "no se cuelga en la calle")
+	check(sim.buy_furniture("colgante", Vector2i(10, 2), 0) != "", "ni en la cocina")
+	check(layout.accessibility_problem() == "", "colgar lámparas no tapa el paso")
+	# Cada local nuevo trae sus acabados.
+	var data = load("res://simulation/game_data.gd").new()
+	data.load_all()
+	var fresh := RestaurantSim.new(data.sim_data("alternativo", "salon"), 9 * 60, 5)
+	check(fresh.layout.walls.size() == fresh.layout.size.x + fresh.layout.size.y - 3, "un local grande tiene sus paredes")
 	data.free()

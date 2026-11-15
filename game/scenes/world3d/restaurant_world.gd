@@ -11,8 +11,6 @@ const THOUGHTS := {
 	CustomerGroup.State.ESPERANDO_COMIDA: "cubiertos",
 	CustomerGroup.State.ESPERANDO_CUENTA: "€",
 }
-const STREET_COLOR := Color("9aa3a8")
-const WALL_COLOR := Color("f3e6d3")
 const WOOD := Color("a0673a")
 ## Hacia dónde se mira para "mirar a la cámara".
 const TOWARDS_CAMERA := Vector3(1, 0, 1)
@@ -30,12 +28,16 @@ var _dirty_marks := {}
 var _stain_marks := {}
 ## Muebles colocados (mesas y decoración): se rehacen al reformar el local.
 var _furniture_root: Node3D
+## Suelos, paredes, ventanas, cuadros y luces del local.
+var finishes: RoomFinishes
 
 
 func setup(restaurant_sim: RestaurantSim) -> void:
 	sim = restaurant_sim
+	finishes = RoomFinishes.new()
+	add_child(finishes)
+	finishes.setup(sim)
 	_build_floor()
-	_build_walls()
 	_build_furniture()
 	_furniture_root = Node3D.new()
 	add_child(_furniture_root)
@@ -334,33 +336,6 @@ func _bot(key: String, role: Bot.Role, seed_value: int) -> Bot:
 # --- Escenario -------------------------------------------------------------
 
 func _build_floor() -> void:
-	var r := sim.layout.region
-	var tile := BoxMesh.new()
-	tile.size = Vector3(0.98, 0.1, 0.98)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
-	mm.mesh = tile
-	mm.instance_count = r.size.x * r.size.y
-	var i := 0
-	for x in range(r.position.x, r.end.x):
-		for y in range(r.position.y, r.end.y):
-			var cell := Vector2i(x, y)
-			var height := -0.1 if x < 0 else -0.05
-			mm.set_instance_transform(i, Transform3D(Basis(), Vector3(x, height, y)))
-			var color := _cell_color(cell)
-			if (x + y) % 2 == 0:
-				color = color.darkened(0.06)
-			mm.set_instance_color(i, color)
-			i += 1
-	var floor_mat := StandardMaterial3D.new()
-	floor_mat.vertex_color_use_as_albedo = true
-	floor_mat.roughness = 0.85
-	var floor_node := MultiMeshInstance3D.new()
-	floor_node.multimesh = mm
-	floor_node.material_override = floor_mat
-	add_child(floor_node)
-
 	_selection = MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(0.98, 0.98)
@@ -372,25 +347,6 @@ func _build_floor() -> void:
 	_selection.material_override = sel_mat
 	_selection.visible = false
 	add_child(_selection)
-
-
-func _build_walls() -> void:
-	var w := float(sim.layout.size.x)
-	# Pared del fondo con ventanas y el cartel del restaurante.
-	_box(Vector3(w, 1.5, 0.2), Vector3(w / 2.0 - 0.5, 0.75, -0.6), WALL_COLOR)
-	var window_x := 1.0
-	while window_x < w - 1.5:
-		if absf(window_x - w * 0.55) > 2.4:  # sin tapar el cartel
-			_box(Vector3(1.4, 0.6, 0.05), Vector3(window_x, 0.9, -0.48), Color("bcd8ec"))
-		window_x += 3.5
-	var sign_label := Label3D.new()
-	sign_label.text = "MI RESTAURANTE"
-	sign_label.font_size = 96
-	sign_label.outline_size = 0
-	sign_label.pixel_size = 0.004
-	sign_label.modulate = Color("a0673a")
-	sign_label.position = Vector3(w * 0.55, 1.25, -0.48)
-	add_child(sign_label)
 
 
 func _build_furniture() -> void:
@@ -488,12 +444,3 @@ func _box(size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	m.position = pos
 	add_child(m)
 	return m
-
-
-func _cell_color(cell: Vector2i) -> Color:
-	if cell.x < 0:
-		return STREET_COLOR
-	for zone in sim.layout.zones:
-		if zone["rect"].has_point(cell):
-			return zone["color"]
-	return Color("dddddd")

@@ -14,6 +14,8 @@ const CATEGORY_NAMES := {
 	"invitaciones": "Invitaciones de la casa",
 	"muebles": "Muebles y decoración",
 	"venta_muebles": "Venta de muebles",
+	"suelos": "Suelos",
+	"paredes": "Paredes y ventanas",
 }
 
 var _body: VBoxContainer

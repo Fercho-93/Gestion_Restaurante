@@ -8,19 +8,39 @@ extends Node3D
 
 var _taps := TapDetector.new()
 var build := BuildMode.new()
+var _day := -1.0
 
 
 func _ready() -> void:
-	sun.rotation_degrees = Vector3(-55, -30, 0)
+	sun.rotation_degrees = Vector3(-55, 30, 0)
 	world.setup(Game.sim)
 	camera.fit_layout(Game.sim.layout.size)
 	hud.show_info("Toca: suelo = ir · persona = hablar · a ti = trabajar")
 	hud.toasts.pressed.connect(func(cell: Vector2i): camera.focus(Vector3(cell.x, 0, cell.y)))
 	add_child(build)
-	build.setup(Game.sim, camera)
+	build.setup(Game.sim, camera, world.finishes)
 	hud.setup_build(build)
 	hud.build_button.pressed.connect(_enter_build)
 	hud.build_panel.done.connect(build.exit)
+
+
+## Luz del día: sol, cielo, cristales y lámparas cambian con la hora.
+func _process(_delta: float) -> void:
+	var t := Game.clock.get_hour() + Game.clock.get_minute() / 60.0
+	var day := smoothstep(6.5, 9.0, t) * (1.0 - smoothstep(18.5, 21.0, t))
+	if absf(day - _day) < 0.004:
+		return
+	_day = day
+	var night := 1.0 - day
+	sun.light_energy = lerpf(0.12, 0.75, day)
+	sun.light_color = Color(0.55, 0.6, 0.95).lerp(Color(1, 0.96, 0.9), day)
+	var env := $Environment.environment as Environment
+	env.background_color = Color("141a33").lerp(Color(0.66, 0.75, 0.88), day)
+	env.ambient_light_color = Color(0.36, 0.42, 0.7).lerp(Color(0.86, 0.89, 0.96), day)
+	env.ambient_light_energy = lerpf(0.42, 0.35, day)
+	world.finishes.set_night(night)
+	for light in get_tree().get_nodes_in_group("luz_ambiente"):
+		light.light_energy = float(light.get_meta("base", 1.0)) * lerpf(0.35, 1.0, night)
 
 
 func _enter_build() -> void:

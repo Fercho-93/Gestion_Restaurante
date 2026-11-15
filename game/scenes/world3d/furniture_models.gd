@@ -69,6 +69,26 @@ static func build(def: Dictionary, rot: int = 0, ghost: bool = false) -> Node3D:
 			_glow(_box(root, Vector3(0.12, 0.16, 0.12), Vector3(0, 0.63, 0), WARM_LIGHT, ghost), ghost)
 			if not ghost:
 				_light(root, Vector3(0, 0.7, 0), 1.8, 0.6)
+		"colgante":
+			_cyl(root, 0.012, 0.012, 1.0, Vector3(0, 2.05, 0), Color("37474f"), ghost)
+			_cyl(root, 0.1, 0.24, 0.2, Vector3(0, 1.5, 0), Color("2b2f3a"), ghost)
+			_glow(_sphere(root, 0.1, Vector3(0, 1.42, 0), WARM_LIGHT, ghost), ghost)
+			if not ghost:
+				_light(root, Vector3(0, 1.3, 0), 3.4, 1.0)
+		"sofa":
+			var c := Vector3(0.5, 0, 0)
+			var fabric := Color("3d6b7a")
+			_box(root, Vector3(1.8, 0.3, 0.8), c + Vector3(0, 0.15, 0), fabric.darkened(0.2), ghost)
+			for i in 2:
+				_box(root, Vector3(0.84, 0.14, 0.6), c + Vector3(-0.44 + i * 0.88, 0.37, 0.07), fabric, ghost)
+			_box(root, Vector3(1.8, 0.5, 0.2), c + Vector3(0, 0.55, -0.3), fabric.darkened(0.1), ghost)
+			for sign in [-1.0, 1.0]:
+				_box(root, Vector3(0.14, 0.42, 0.8), c + Vector3(sign * 0.83, 0.3, 0), fabric.darkened(0.15), ghost)
+		"macetero":
+			var c := Vector3(0.5, 0, 0)
+			_box(root, Vector3(1.8, 0.32, 0.45), c + Vector3(0, 0.16, 0), WOOD.darkened(0.15), ghost)
+			for i in 4:
+				_sphere(root, 0.26 - (i % 2) * 0.03, c + Vector3(-0.66 + i * 0.44, 0.52 + (i % 2) * 0.05, 0), LEAF.darkened(0.05 * (i % 3)), ghost)
 		_:
 			_box(root, Vector3(0.8, 0.8, 0.8), Vector3(0, 0.4, 0), Color("b0bec5"), ghost)
 	return root
@@ -155,4 +175,6 @@ static func _light(root: Node3D, pos: Vector3, reach: float, energy: float) -> v
 	light.omni_range = reach
 	light.light_energy = energy
 	light.position = pos
+	light.set_meta("base", energy)
+	light.add_to_group("luz_ambiente")
 	root.add_child(light)
