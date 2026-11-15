@@ -125,7 +125,9 @@ func _summary() -> void:
 				opinion += n.opinion
 			if n.is_regular():
 				regulars += 1
-		_line("%s · alquiler %d €/día" % [sim.barrio["nombre"], int(sim.fixed_costs["alquiler"])], 28, Color("b0bec5"))
+		var housing := "%s en propiedad · tasas %d €/día" % [sim.property_local["nombre"], int(sim.fixed_costs["tasas"])] \
+				if not sim.property_local.is_empty() else "alquiler %d €/día" % int(sim.fixed_costs["alquiler"])
+		_line("%s · %s" % [sim.barrio["nombre"], housing], 28, Color("b0bec5"))
 		var opinion_text := "—" if known == 0 else "%d%%" % roundi(opinion / known * 100.0)
 		_line("   Vecinos que ya os conocen: %d de %d · Habituales: %d · Les gusta: %s" % [
 				known, sim.population.neighbors.size(), regulars, opinion_text], 28)

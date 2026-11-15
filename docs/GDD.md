@@ -179,6 +179,13 @@ Plan por pasos:
 4. **Nuevas necesidades**: aseos para clientes, sala de descanso para el personal.
 5. **Vida visual**: día y noche, luces, fachada y calle según el barrio, sonido.
 6. **Empezar de cero**: elegir un local vacío del barrio (tamaño, forma, precio) y montarlo.
+   - ✅ Primer paso: tras elegir barrio se **compra un local** (5 tamaños, de 9×8 a 16×14
+     casillas) con un presupuesto inicial de 60.000 € igual para todos; el precio del local
+     se multiplica por lo caro que es el suelo del barrio. El local viene vacío (sin mesas
+     ni decoración), en propiedad (paga tasas, no alquiler) y con un camarero y un cocinero
+     como mínimo hasta que se pueda contratar. Se amuebla con el modo construcción.
+   - Pendiente: contratar personal desde cero, terraza, doble planta y solares vacíos con
+     paredes propias.
 
 Lo aprendido en el paso 1: los pasillos de una casilla provocaban atascos sin fin. Ahora,
 cuando dos personas se encuentran de frente en un pasillo estrecho, una cede el paso

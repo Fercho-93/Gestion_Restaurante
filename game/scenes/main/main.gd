@@ -13,7 +13,7 @@ var build := BuildMode.new()
 func _ready() -> void:
 	sun.rotation_degrees = Vector3(-55, -30, 0)
 	world.setup(Game.sim)
-	camera.focus(Vector3(Game.sim.layout.size.x / 2.0 - 1.0, 0, Game.sim.layout.size.y / 2.0))
+	camera.fit_layout(Game.sim.layout.size)
 	hud.show_info("Toca: suelo = ir · persona = hablar · a ti = trabajar")
 	hud.toasts.pressed.connect(func(cell: Vector2i): camera.focus(Vector3(cell.x, 0, cell.y)))
 	add_child(build)

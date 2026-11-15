@@ -9,13 +9,15 @@ const PITCH_DEG := -35.264
 const YAW_DEG := 45.0
 const DISTANCE := 40.0
 const MIN_SIZE := 4.0
-const MAX_SIZE := 16.0
+const MAX_SIZE := 20.0
 ## Cuánto puede moverse un dedo (en fracción del alto de pantalla) y seguir siendo un toque.
 const TAP_SLOP := 0.035
 ## Zona por la que se puede mover el centro de la cámara.
 const BOUNDS := Rect2(-3, -1, 16, 12)
 
 var target := Vector3.ZERO
+## Zona por la que se puede mover el centro de la cámara (se ajusta al tamaño del local).
+var bounds := BOUNDS
 ## Dedos en pantalla: índice -> posición.
 var _touches := {}
 ## Dónde se apoyó el dedo (para no mover la cámara con el temblor de un toque).
@@ -35,6 +37,13 @@ func _ready() -> void:
 ## Distancia máxima (en píxeles de la vista) para considerar un gesto como toque.
 func tap_slop() -> float:
 	return get_viewport().get_visible_rect().size.y * TAP_SLOP
+
+
+## Encuadra un local de `layout_size` casillas: más lejos y con más margen si es grande.
+func fit_layout(layout_size: Vector2i) -> void:
+	bounds = Rect2(-3, -1, layout_size.x + 4, layout_size.y + 2)
+	size = clampf(10.5 * maxf(1.0, maxf(layout_size.y / 10.0, layout_size.x / 14.0)), 10.5, MAX_SIZE)
+	focus(Vector3(layout_size.x / 2.0 - 1.0, 0, layout_size.y / 2.0))
 
 
 func focus(point: Vector3) -> void:
@@ -101,8 +110,8 @@ func _move_keeping(from_screen: Vector2, to_screen: Vector2, new_size: float) ->
 	_apply()
 	target += anchor - screen_to_ground(to_screen)
 	target.y = 0.0
-	target.x = clampf(target.x, BOUNDS.position.x, BOUNDS.end.x)
-	target.z = clampf(target.z, BOUNDS.position.y, BOUNDS.end.y)
+	target.x = clampf(target.x, bounds.position.x, bounds.end.x)
+	target.z = clampf(target.z, bounds.position.y, bounds.end.y)
 	_apply()
 
 

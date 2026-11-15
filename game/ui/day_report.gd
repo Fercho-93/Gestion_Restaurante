@@ -9,6 +9,7 @@ const CATEGORY_NAMES := {
 	"materia_prima": "Materia prima",
 	"personal": "Personal",
 	"alquiler": "Alquiler",
+	"tasas": "Tasas e impuestos",
 	"suministros": "Suministros",
 	"invitaciones": "Invitaciones de la casa",
 	"muebles": "Muebles y decoración",

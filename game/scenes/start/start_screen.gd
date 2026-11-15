@@ -1,3 +1,4 @@
+class_name StartScreen
 extends Control
 ## Pantalla de inicio: el jugador elige en qué barrio abre su restaurante. Cada barrio
 ## tiene su gente, sus precios, su alquiler y sus horas fuertes.
@@ -341,7 +342,7 @@ func _ready() -> void:
 		i += 1
 	column.add_child(_spacer())
 
-	var hint := _label("Flechas para elegir  ·  Intro para abrir", 20, FAINT_INK)
+	var hint := _label("Flechas para moverte  ·  Intro para confirmar", 20, FAINT_INK)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(hint)
 
@@ -383,7 +384,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_select((maxi(_selected, 0) + 1) % n)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_accept") and _selected >= 0:
-		Game.start(_ids[_selected])
+		Game.choose_barrio(_ids[_selected])
 		get_viewport().set_input_as_handled()
 
 
@@ -413,7 +414,7 @@ func _card(b: Dictionary, index: int, max_flow: float) -> Control:
 	var rent := float(b["alquiler_dia"])
 	var flow := _flow(b)
 	card.bars.append(_stat(box, "Precios", clampf(price / 1.5, 0.0, 1.0), col, _price_word(price).capitalize()))
-	card.bars.append(_stat(box, "Alquiler", clampf(rent / 160.0, 0.0, 1.0), col, "%d €/día" % int(rent)))
+	card.bars.append(_stat(box, "Locales", clampf(rent / 160.0, 0.0, 1.0), col, _land_word(rent)))
 	card.bars.append(_stat(box, "Afluencia", clampf(flow / max_flow, 0.0, 1.0), col, _flow_word(flow / max_flow)))
 
 	var facts := HFlowContainer.new()
@@ -435,7 +436,7 @@ func _card(b: Dictionary, index: int, max_flow: float) -> Control:
 	box.add_child(push)
 
 	var button := Button.new()
-	button.text = "Abrir aquí"
+	button.text = "Elegir barrio"
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(0, 62)
 	button.add_theme_font_size_override("font_size", 26)
@@ -455,7 +456,7 @@ func _card(b: Dictionary, index: int, max_flow: float) -> Control:
 		button.add_theme_stylebox_override(state, s)
 	for key in ["font_color", "font_hover_color", "font_pressed_color"]:
 		button.add_theme_color_override(key, INK)
-	button.pressed.connect(Game.start.bind(b["id"]))
+	button.pressed.connect(Game.choose_barrio.bind(b["id"]))
 	box.add_child(button)
 	return card
 
@@ -506,6 +507,17 @@ func _chip(text: String, col: Color) -> Control:
 	l.add_theme_color_override("font_color", INK)
 	panel.add_child(l)
 	return panel
+
+
+## Lo caro que es comprar un local en el barrio.
+static func _land_word(rent: float) -> String:
+	if rent < 80.0:
+		return "Baratos"
+	if rent < 120.0:
+		return "Medios"
+	if rent < 140.0:
+		return "Caros"
+	return "Muy caros"
 
 
 static func _price_word(level: float) -> String:

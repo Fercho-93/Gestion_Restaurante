@@ -35,6 +35,7 @@ func _initialize() -> void:
 	test_person_sheet()
 	test_build_furniture()
 	test_cluttered_layout_never_gets_stuck()
+	test_buying_a_local()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1014,3 +1015,47 @@ func test_cluttered_layout_never_gets_stuck() -> void:
 			sim.update(0.25)
 		check(sim.groups.is_empty(), "local abarrotado (semilla %d): a las 3:00 no queda nadie atascado (%d grupos)" % [seed_value, sim.groups.size()])
 		check(report.get("clientes_servidos", 0) > 10, "y se ha servido a gente (%d)" % report.get("clientes_servidos", 0))
+
+
+func test_buying_a_local() -> void:
+	var data = load("res://simulation/game_data.gd").new()
+	data.load_all()
+	check(data.validate().is_empty(), "los datos con locales son coherentes")
+	check(data.locales.size() >= 4, "hay varios locales a la venta")
+	var last_width := 0
+	var last_price := 0
+	for local_id in data.locales:
+		var comedor: Array = data.locales[local_id]["comedor"]
+		check(int(comedor[0]) * int(comedor[1]) > last_width, "los locales van de menor a mayor")
+		last_width = int(comedor[0]) * int(comedor[1])
+		check(data.local_price(local_id, "alternativo") > last_price, "y de más barato a más caro")
+		last_price = data.local_price(local_id, "alternativo")
+		check(data.local_price(local_id, "acomodado") > data.local_price(local_id, "universitario"), "el mismo local cuesta más en un barrio caro")
+		# Se compra el local: el dinero baja su precio y solo queda el personal imprescindible.
+		var sim_data: Dictionary = data.sim_data("alternativo", local_id)
+		var price: int = data.local_price(local_id, "alternativo")
+		var sim := RestaurantSim.new(sim_data, 9 * 60, 5)
+		var left: float = float(data.NEW_GAME_MONEY - price)
+		check(sim.finances.money <= left and sim.finances.money > left - 2000.0, "%s: queda el presupuesto menos el local (y el primer pedido)" % local_id)
+		check(sim.waiters().size() == 1 and sim.cooks().size() == 1, "%s: un camarero y un cocinero" % local_id)
+		check(sim.layout.tables.is_empty() and sim.layout.furniture.is_empty(), "%s: el local viene vacío" % local_id)
+		check(not sim.fixed_costs.has("alquiler") and sim.fixed_costs.has("tasas"), "%s: en propiedad paga tasas, no alquiler" % local_id)
+		check(sim.layout.accessibility_problem() == "", "%s: el local vacío es accesible" % local_id)
+		check(sim.layout.size.x == int(comedor[0]) + 4, "%s: mide lo que dice su comedor" % local_id)
+		# Se amuebla con mesas y funciona un servicio entero.
+		sim.free_build = true
+		var placed := 0
+		for y in range(1, sim.layout.size.y - 1):
+			for x in range(1, int(comedor[0]) - 1):
+				if placed < 12 and sim.buy_furniture("mesa_4", Vector2i(x, y), 0) == "":
+					placed += 1
+		check(placed >= 2, "%s: caben mesas (%d)" % [local_id, placed])
+		check(sim.layout.accessibility_problem() == "", "%s: amueblado sigue siendo accesible" % local_id)
+		sim.free_build = false
+		for i in range(12 * 60 * 4):
+			sim.update(0.25)
+		check(sim.day_stats["clientes_servidos"] > 0 or sim.finances.total(sim.finances.income) > 0.0, "%s: se sirve gente en un local nuevo" % local_id)
+	# Sin local elegido todo sigue como antes.
+	var classic := RestaurantSim.new(data.sim_data("alternativo"), 9 * 60, 5)
+	check(classic.property_local.is_empty() and classic.fixed_costs.has("alquiler"), "sin comprar local, paga alquiler")
+	data.free()

@@ -378,15 +378,18 @@ func _build_walls() -> void:
 	var w := float(sim.layout.size.x)
 	# Pared del fondo con ventanas y el cartel del restaurante.
 	_box(Vector3(w, 1.5, 0.2), Vector3(w / 2.0 - 0.5, 0.75, -0.6), WALL_COLOR)
-	for x in [1.0, 4.0, 9.5]:
-		_box(Vector3(1.4, 0.6, 0.05), Vector3(x, 0.9, -0.48), Color("bcd8ec"))
+	var window_x := 1.0
+	while window_x < w - 1.5:
+		if absf(window_x - w * 0.55) > 2.4:  # sin tapar el cartel
+			_box(Vector3(1.4, 0.6, 0.05), Vector3(window_x, 0.9, -0.48), Color("bcd8ec"))
+		window_x += 3.5
 	var sign_label := Label3D.new()
 	sign_label.text = "MI RESTAURANTE"
 	sign_label.font_size = 96
 	sign_label.outline_size = 0
 	sign_label.pixel_size = 0.004
 	sign_label.modulate = Color("a0673a")
-	sign_label.position = Vector3(6.6, 1.25, -0.48)
+	sign_label.position = Vector3(w * 0.55, 1.25, -0.48)
 	add_child(sign_label)
 
 

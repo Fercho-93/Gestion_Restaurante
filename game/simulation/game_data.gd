@@ -2,6 +2,10 @@ extends Node
 ## Autoload "GameData": carga el contenido del juego desde los JSON de res://data.
 
 const DATA_DIR := "res://data/"
+## Dinero con el que empieza una partida nueva: con él se compra el local y se equipa.
+const NEW_GAME_MONEY := 60000
+## Cada día se pagan en tasas e impuestos 1/700 del valor del local.
+const TAX_DIVISOR := 700.0
 
 ## id -> diccionario con los datos del ingrediente.
 var ingredients: Dictionary = {}
@@ -18,6 +22,8 @@ var perfiles: Dictionary = {}
 var rasgos: Dictionary = {}
 ## Catálogo de muebles y decoración del modo construcción.
 var muebles: Dictionary = {}
+## Locales que se pueden comprar (id -> datos), del más pequeño al más grande.
+var locales: Dictionary = {}
 
 
 func _ready() -> void:
@@ -33,19 +39,49 @@ func load_all() -> void:
 	perfiles = _by_id(_load_json("perfiles.json"))
 	rasgos = _by_id(_load_json("rasgos.json"))
 	muebles = _by_id(_load_json("muebles.json"))
+	locales = _by_id(_load_json("locales.json"))
 	for error in validate():
 		push_error(error)
 
 
 ## Todo lo que necesita RestaurantSim para arrancar. Con un barrio, la clientela son sus
 ## vecinos; sin él, clientes anónimos con la demanda genérica.
-func sim_data(barrio_id: String = "") -> Dictionary:
+## Con un local, se parte de ese local vacío comprado con el dinero inicial: queda lo que
+## sobra y solo el personal imprescindible (un camarero y un cocinero).
+func sim_data(barrio_id: String = "", local_id: String = "") -> Dictionary:
 	var data := { "ingredients": ingredients, "recipes": recipes, "start": start, "demand": demand, "muebles": muebles }
 	if barrios.has(barrio_id):
 		data["barrio"] = barrios[barrio_id]
 		data["perfiles"] = perfiles
 		data["rasgos"] = rasgos
+	if locales.has(local_id):
+		var local: Dictionary = locales[local_id]
+		var price := local_price(local_id, barrio_id)
+		var begin: Dictionary = start.duplicate(true)
+		begin["local"] = LocalFactory.build(int(local["comedor"][0]), int(local["comedor"][1]))
+		begin["dinero_inicial"] = NEW_GAME_MONEY - price
+		begin["personal"] = _basic_crew(begin["personal"])
+		data["start"] = begin
+		data["local_comprado"] = { "id": local_id, "nombre": local["nombre"], "precio": price,
+				"tasas_dia": roundf(price / TAX_DIVISOR) }
 	return data
+
+
+## Lo que cuesta un local en un barrio: el precio base por lo caro que sea el suelo allí.
+func local_price(local_id: String, barrio_id: String) -> int:
+	var base := float(locales[local_id]["precio"])
+	var factor := float(barrios[barrio_id]["alquiler_dia"]) / 100.0 if barrios.has(barrio_id) else 1.0
+	return roundi(base * factor / 500.0) * 500
+
+
+## El camarero y el cocinero más baratos de la plantilla.
+static func _basic_crew(all: Array) -> Array:
+	var cheapest := {}
+	for p in all:
+		var role: String = p["puesto"]
+		if not cheapest.has(role) or float(p["salario_dia"]) < float(cheapest[role]["salario_dia"]):
+			cheapest[role] = p
+	return cheapest.values()
 
 
 ## Comprueba que el contenido es coherente. Devuelve la lista de errores.
@@ -73,6 +109,10 @@ func validate() -> Array[String]:
 		for recipe_id in perfiles[profile_id]["gustos"]:
 			if not recipes.has(recipe_id):
 				errors.append("Perfil '%s' le gusta una receta desconocida '%s'" % [profile_id, recipe_id])
+	for local_id in locales:
+		var size: Array = locales[local_id]["comedor"]
+		if size.size() != 2 or int(size[1]) < LocalFactory.MIN_HEIGHT:
+			errors.append("El local '%s' tiene un comedor con tamaño no válido" % local_id)
 	for m in start.get("local", {}).get("muebles", []):
 		if not muebles.has(m["tipo"]):
 			errors.append("El local empieza con un mueble desconocido '%s'" % m["tipo"])

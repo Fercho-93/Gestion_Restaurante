@@ -6,6 +6,7 @@ extends Node
 ## Paso máximo de simulación en minutos de juego (para que x4 sea igual de preciso).
 const MAX_STEP := 0.25
 const MAIN_SCENE := "res://scenes/main/main.tscn"
+const LOCAL_SCENE := "res://scenes/start/local_select.tscn"
 ## Barrio si se abre el restaurante directamente sin pasar por la pantalla de inicio.
 const DEFAULT_BARRIO := "alternativo"
 
@@ -16,12 +17,21 @@ var sim: RestaurantSim:
 			_sim = RestaurantSim.new(GameData.sim_data(DEFAULT_BARRIO), clock.total_minutes)
 		return _sim
 var _sim: RestaurantSim
+## Barrio elegido en la portada, a la espera de elegir local.
+var pending_barrio := ""
 
 
-## Empieza una partida nueva en el barrio elegido y abre el restaurante.
-func start(barrio_id: String) -> void:
+## Paso 1: se elige barrio y se pasa a elegir el local.
+func choose_barrio(barrio_id: String) -> void:
+	pending_barrio = barrio_id
+	get_tree().change_scene_to_file(LOCAL_SCENE)
+
+
+## Empieza una partida nueva en el barrio elegido (y con el local comprado, si lo hay)
+## y abre el restaurante.
+func start(barrio_id: String, local_id: String = "") -> void:
 	clock = SimClock.new(1, 11, 30)
-	_sim = RestaurantSim.new(GameData.sim_data(barrio_id), clock.total_minutes)
+	_sim = RestaurantSim.new(GameData.sim_data(barrio_id, local_id), clock.total_minutes)
 	get_tree().change_scene_to_file(MAIN_SCENE)
 
 

@@ -59,6 +59,8 @@ var reputation := 0.5
 var opening_hour: int
 var last_entry_hour: int
 var fixed_costs: Dictionary
+## Local comprado al empezar ({id, nombre, precio, tasas_dia}); vacío si no se compró.
+var property_local: Dictionary = {}
 var stock_targets: Dictionary
 var rng := RandomNumberGenerator.new()
 ## Reloj absoluto en minutos de juego.
@@ -104,6 +106,11 @@ func _init(data: Dictionary, start_minutes: float, random_seed: int = -1) -> voi
 		fixed_costs["alquiler"] = float(barrio["alquiler_dia"])
 		price_level = float(barrio["nivel_precios"])
 		population = Population.new(barrio, data["perfiles"], data["rasgos"], rng)
+	if data.has("local_comprado"):
+		# Un local en propiedad no paga alquiler, sino tasas e impuestos.
+		property_local = data["local_comprado"]
+		fixed_costs.erase("alquiler")
+		fixed_costs["tasas"] = float(property_local["tasas_dia"])
 	stock_targets = start["stock_objetivo"]
 	for item in start["carta"]:
 		menu[item["receta"]] = float(item["precio"])

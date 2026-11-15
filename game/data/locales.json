@@ -1,0 +1,52 @@
+[
+	{
+		"id": "pequeno",
+		"nombre": "Local pequeño",
+		"descripcion": "Un bajo estrecho con pocas mesas. Barato de comprar y fácil de llevar con poco personal.",
+		"comedor": [
+			5,
+			8
+		],
+		"precio": 16000
+	},
+	{
+		"id": "alargado",
+		"nombre": "Local alargado",
+		"descripcion": "Largo y estrecho, con la puerta en un extremo. Cabe más gente, pero hay que cuidar los pasillos.",
+		"comedor": [
+			6,
+			12
+		],
+		"precio": 24000
+	},
+	{
+		"id": "mediano",
+		"nombre": "Local mediano",
+		"descripcion": "El tamaño de siempre: comedor cuadrado, cocina cómoda y espacio para crecer.",
+		"comedor": [
+			8,
+			10
+		],
+		"precio": 32000
+	},
+	{
+		"id": "amplio",
+		"nombre": "Local amplio",
+		"descripcion": "Comedor grande con sitio para muchas mesas y para decorarlo a tu gusto.",
+		"comedor": [
+			10,
+			12
+		],
+		"precio": 44000
+	},
+	{
+		"id": "salon",
+		"nombre": "Gran salón",
+		"descripcion": "El más grande del barrio: mucho aforo, mucho que equipar y mucho que pagar.",
+		"comedor": [
+			12,
+			14
+		],
+		"precio": 58000
+	}
+]
