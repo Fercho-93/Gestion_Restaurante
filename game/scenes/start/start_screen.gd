@@ -3,10 +3,10 @@ extends Control
 ## tiene su gente, sus precios, su alquiler y sus horas fuertes.
 ## Estilo minimalista con paneles de cristal translúcido sobre un fondo claro en azules, grises y blancos.
 
-const INK := Color("23364d")  # azul grisáceo oscuro
+const INK := Color("2c3e55")  # azul grisáceo oscuro
 const SOFT_INK := Color("5d6b7c")
 const FAINT_INK := Color("8693a3")
-const ACCENT := Color("7db6ea")  # único acento: azul claro
+const ACCENT := Color("b7d4ee")  # único acento: azul claro
 const GLASS_LINE := Color(1, 1, 1, 0.95)
 
 const BG_SHADER := """
@@ -15,11 +15,11 @@ float blob(vec2 uv, vec2 c, float r) {
 	return smoothstep(r, 0.0, distance(uv, c));
 }
 void fragment() {
-	vec3 col = mix(vec3(0.84, 0.91, 0.98), vec3(0.72, 0.82, 0.92), UV.y);
-	col = mix(col, vec3(0.48, 0.71, 0.94), blob(UV, vec2(0.1, 0.08), 0.65) * 0.8);
-	col = mix(col, vec3(0.6, 0.76, 0.93), blob(UV, vec2(0.92, 0.5), 0.65) * 0.7);
-	col = mix(col, vec3(1.0), blob(UV, vec2(0.5, 0.3), 0.45) * 0.55);
-	col = mix(col, vec3(0.66, 0.72, 0.8), blob(UV, vec2(0.25, 1.0), 0.55) * 0.5);
+	vec3 col = mix(vec3(0.95, 0.97, 0.99), vec3(0.89, 0.93, 0.97), UV.y);
+	col = mix(col, vec3(0.75, 0.86, 0.96), blob(UV, vec2(0.1, 0.08), 0.65) * 0.75);
+	col = mix(col, vec3(0.8, 0.88, 0.96), blob(UV, vec2(0.92, 0.5), 0.65) * 0.65);
+	col = mix(col, vec3(1.0), blob(UV, vec2(0.5, 0.3), 0.45) * 0.6);
+	col = mix(col, vec3(0.82, 0.86, 0.91), blob(UV, vec2(0.25, 1.0), 0.55) * 0.5);
 	COLOR = vec4(col, 1.0);
 }
 """
@@ -35,7 +35,7 @@ void fragment() {
 	float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
 	float edge = 1.0 - smoothstep(-1.0, 0.0, d);
 	// velo de cristal: blanco arriba, azul muy claro abajo
-	vec3 c = mix(vec3(1.0), vec3(0.86, 0.93, 1.0), UV.y);
+	vec3 c = mix(vec3(1.0), vec3(0.92, 0.96, 1.0), UV.y);
 	float alpha = mix(0.7, 0.45, UV.y) * strength;
 	COLOR = vec4(c, alpha * edge);
 }
@@ -45,7 +45,7 @@ void fragment() {
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var base := ColorRect.new()  # color base por si el shader no se dibuja
-	base.color = Color("c3d9f0")
+	base.color = Color("e3eef9")
 	base.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(base)
 	var bg := ColorRect.new()
@@ -161,10 +161,10 @@ func _card(b: Dictionary) -> Control:
 				s.bg_color = ACCENT
 				s.border_color = Color.WHITE
 			"pressed":
-				s.bg_color = ACCENT.darkened(0.12)
+				s.bg_color = ACCENT.darkened(0.08)
 				s.border_color = Color.WHITE
 			_:
-				s.bg_color = Color(ACCENT, 0.7)
+				s.bg_color = Color(ACCENT, 0.45)
 				s.border_color = Color(1, 1, 1, 0.9)
 		button.add_theme_stylebox_override(state, s)
 	button.add_theme_color_override("font_color", INK)
@@ -191,10 +191,10 @@ func _label(text: String, size: int, color: Color, bold := false) -> Label:
 func _chip(text: String) -> Control:
 	var panel := PanelContainer.new()
 	var style := StyleBoxFlat.new()
-	style.bg_color = Color(ACCENT, 0.3)
+	style.bg_color = Color(ACCENT, 0.22)
 	style.set_corner_radius_all(16)
 	style.set_border_width_all(1)
-	style.border_color = Color(ACCENT, 0.8)
+	style.border_color = Color(ACCENT, 0.9)
 	style.content_margin_left = 14
 	style.content_margin_right = 14
 	style.content_margin_top = 4
