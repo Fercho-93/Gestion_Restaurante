@@ -325,6 +325,10 @@ func _update_gestor(delta: float) -> void:
 
 
 func _bot(key: String, role: Bot.Role, seed_value: int) -> Bot:
+	# Si cambia de rol (el gestor le asigna otro trabajo), se le cambia el uniforme.
+	if _bots.has(key) and _bots[key].role != role:
+		_bots[key].queue_free()
+		_bots.erase(key)
 	if not _bots.has(key):
 		var bot := Bot.new()
 		bot.setup(role, seed_value)

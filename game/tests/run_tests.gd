@@ -1236,6 +1236,15 @@ func test_staff_roles() -> void:
 	var cleaner: StaffMember = sim.staff[2]
 	var greeter: StaffMember = sim.staff[3]
 	check(sim.set_role(cleaner, "limpieza") == "" and cleaner.rol == "limpieza", "uno pasa a limpieza")
+	check(Bot.appearance_for({ "entity": cleaner })[0] == Bot.Role.LIMPIEZA and Bot.appearance_for({ "entity": lucia })[0] == Bot.Role.CAMARERO, "cada rol tiene su uniforme")
+	for rol in StaffMember.ROLES:
+		cleaner.set_rol(rol)
+		var worn: int = Bot.appearance_for({ "entity": cleaner })[0]
+		var bot := Bot.new()
+		bot.setup(worn, 3)
+		check(bot.role == worn and bot.get_child_count() > 0, "se construye el personaje de %s" % rol)
+		bot.free()
+	cleaner.set_rol("limpieza")
 	check(sim.set_role(greeter, "acomodador") == "" and greeter.puesto == StaffMember.ROLE_WAITER, "otro a acompañar clientes")
 	check(sim.set_role(greeter, "acomodador") != "", "no se puede dar el rol que ya tiene")
 	# Dos fogones: el segundo cocinero cabe, el tercero no.

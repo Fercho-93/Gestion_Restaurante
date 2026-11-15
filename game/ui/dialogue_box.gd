@@ -14,6 +14,9 @@ const ROLE_COLORS := {
 	"cliente": Color("f6a5c0"),
 	"camarero": Color("90caf9"),
 	"cocina": Color("ef9a9a"),
+	"barra": Color("c98a96"),
+	"acomodador": Color("9fb2d8"),
+	"limpieza": Color("a5d6a7"),
 	"gestor": Color("ffd54f"),
 }
 ## Estilo de cada tipo de opción: [fondo, texto].
@@ -431,7 +434,7 @@ func _role_color() -> Color:
 	if e is Manager:
 		return ROLE_COLORS["gestor"]
 	if e is StaffMember:
-		return ROLE_COLORS["cocina"] if e.puesto == StaffMember.ROLE_COOK else ROLE_COLORS["camarero"]
+		return ROLE_COLORS.get(e.rol, ROLE_COLORS["camarero"]) if e.rol != "sala" else ROLE_COLORS["camarero"]
 	return ROLE_COLORS["cliente"]
 
 

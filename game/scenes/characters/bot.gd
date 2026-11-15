@@ -4,7 +4,7 @@ extends Node3D
 ## cuerpo blanco redondeado, visor oscuro con ojos luminosos y manos y pies ovalados.
 ## Se construye con formas básicas y se anima por código. Mira hacia -Z.
 
-enum Role { GESTOR, CAMARERO, COCINERO, CLIENTE }
+enum Role { GESTOR, CAMARERO, COCINERO, CLIENTE, BARRA, ACOMODADOR, LIMPIEZA }
 enum Pose { DE_PIE, ANDANDO, SENTADO, TRABAJANDO }
 enum Eyes { FELIZ, NORMAL, ENFADADO, CERRADOS }
 
@@ -59,7 +59,8 @@ static func appearance_for(target: Dictionary) -> Array:
 	if e is Manager:
 		return [Role.GESTOR, 0]
 	if e is StaffMember:
-		return [Role.COCINERO if e.puesto == StaffMember.ROLE_COOK else Role.CAMARERO, e.id * 3 + 1]
+		var by_rol := { "cocina": Role.COCINERO, "sala": Role.CAMARERO, "barra": Role.BARRA, "acomodador": Role.ACOMODADOR, "limpieza": Role.LIMPIEZA }
+		return [by_rol.get(e.rol, Role.CAMARERO), e.id * 3 + 1]
 	return [Role.CLIENTE, e.id * 7 + int(target.get("member", 0))]
 
 
@@ -82,8 +83,10 @@ func setup(bot_role: Role, seed_value: int) -> void:
 	_eyes_mat = (r["eyes_material"] as StandardMaterial3D).duplicate()
 	eyes_mesh.material_override = _eyes_mat
 
-	_hand_l = _hand(-1.0, body_color)
-	_hand_r = _hand(1.0, body_color)
+	# Los guantes de goma de limpieza son amarillos.
+	var hand_color := Color("f2d23c") if role == Role.LIMPIEZA else body_color
+	_hand_l = _hand(-1.0, hand_color)
+	_hand_r = _hand(1.0, hand_color)
 	_foot_l = _part(_rig, r["sphere"], material(body_color), Vector3(-0.09, 0.035, FOOT_Z), Vector3(0.12, 0.07, 0.17))
 	_foot_r = _part(_rig, r["sphere"], material(body_color), Vector3(0.09, 0.035, FOOT_Z), Vector3(0.12, 0.07, 0.17))
 
@@ -96,7 +99,7 @@ func setup(bot_role: Role, seed_value: int) -> void:
 	_add_plate(_table_plate, accent)
 	add_child(_table_plate)
 
-	if role == Role.CAMARERO or role == Role.COCINERO:
+	if role in [Role.CAMARERO, Role.COCINERO, Role.BARRA, Role.ACOMODADOR, Role.LIMPIEZA]:
 		scale = Vector3.ONE * 1.15
 	match role:
 		Role.COCINERO:
@@ -107,6 +110,22 @@ func setup(bot_role: Role, seed_value: int) -> void:
 			_part(_torso, r["sphere"], material(Color("23242b")), Vector3(-0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
 			_part(_torso, r["sphere"], material(Color("23242b")), Vector3(0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
 			_part(_torso, r["box"], material(Color("2b2d36")), Vector3(0, 0.24, -0.176), Vector3(0.3, 0.2, 0.02))
+		Role.BARRA:
+			# Camarero de barra: delantal largo granate, pajarita dorada y gorra plana.
+			_part(_torso, r["box"], material(Color("7b2d3a")), Vector3(0, 0.22, -0.176), Vector3(0.32, 0.3, 0.02))
+			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(-0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
+			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(0.035, 0.465, -0.18), Vector3(0.07, 0.05, 0.03))
+			_part(_torso, r["cylinder"], material(Color("2b2d36")), Vector3(0, 0.71, 0), Vector3(0.27, 0.05, 0.27))
+		Role.ACOMODADOR:
+			# Anfitrión: chaqueta azul marino, corbata roja y una chapa dorada.
+			_part(_torso, r["box"], material(Color("27385a")), Vector3(0, 0.31, -0.176), Vector3(0.34, 0.34, 0.02))
+			_part(_torso, r["box"], material(Color("d94a4a")), Vector3(0, 0.38, -0.19), Vector3(0.05, 0.2, 0.02))
+			_part(_torso, r["sphere"], material(Color("e0b43b")), Vector3(0.11, 0.4, -0.19), Vector3(0.05, 0.05, 0.03))
+		Role.LIMPIEZA:
+			# Limpieza: tabardo verde, gorro azul claro y guantes amarillos.
+			_part(_torso, r["box"], material(Color("4f9d6b")), Vector3(0, 0.3, -0.176), Vector3(0.34, 0.36, 0.02))
+			_part(_torso, r["box"], material(Color("f2d23c")), Vector3(0, 0.15, -0.19), Vector3(0.12, 0.08, 0.02))
+			_part(_torso, r["cylinder"], material(Color("8fc8e8")), Vector3(0, 0.73, 0), Vector3(0.26, 0.1, 0.26))
 		Role.GESTOR:
 			scale = Vector3.ONE * 1.35
 		Role.CLIENTE:
