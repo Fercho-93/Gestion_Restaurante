@@ -57,6 +57,6 @@
 	"stock_objetivo": {
 		"lechuga": 8, "tomate": 7, "cebolla": 3, "patata": 12, "huevo": 90,
 		"aceite_oliva": 5, "pasta": 3, "arroz": 3, "pollo": 5, "ternera": 4,
-		"gambas": 2, "queso": 1.5, "leche": 3
+		"gambas": 2, "queso": 1.5, "leche": 3, "bebidas": 40
 	}
 }

@@ -47,6 +47,11 @@ const GHOST_AFTER := 4.0
 const RESALE_FRACTION := 0.5
 ## Habitaciones: lo que se paga por una copa en la barra, minutos en el ropero y en el baño.
 const BAR_DRINK_PRICE := 3.2
+## Barra: lo que tarda en servir y en limpiarse, y cuánto ensucian las copas.
+const BAR_SERVE_TIME := 1.0
+const BAR_CLEAN_TIME := 1.5
+const BAR_CLEAN_AT := 6
+const BAR_MAX_DIRT := 12
 const COAT_TIME := 0.5
 const WC_MIN_TIME := 1.2
 const WC_MAX_TIME := 2.4
@@ -73,6 +78,10 @@ var fixed_costs: Dictionary
 var property_local: Dictionary = {}
 ## Gente que busca trabajo (se renueva cada día): {nombre, velocidad, trato, habilidad, salario_dia}.
 var candidates: Array[Dictionary] = []
+## Suciedad de la barra (sube con cada copa servida) y quién la está limpiando.
+var bar_dirty := 0
+var bar_cleaner = null
+var _warned_no_drinks := false
 var _next_staff_id := 100
 var _hiring_rng := RandomNumberGenerator.new()
 var stock_targets: Dictionary
@@ -935,7 +944,7 @@ func _reserved_use_cells() -> Dictionary:
 func _update_bar(g: CustomerGroup, dt: float) -> void:
 	if not g.at_bar:
 		# Solo van a la barra si no hay mesa para ellos todavía.
-		if g.state_time < 0.5 or free_table_for(g) != null:
+		if g.state_time < 0.5 or free_table_for(g) != null or not bar_open():
 			return
 		var free: Array[Vector2i] = []
 		var reserved := _reserved_use_cells()
@@ -956,17 +965,40 @@ func _update_bar(g: CustomerGroup, dt: float) -> void:
 		g.bar_cells = picked
 		g.queue_cell = Vector2i(-999, -999)
 		return
-	if g.bar_paid:
-		return
-	var seated := true
+
+
+## ¿Están todos los del grupo ya sentados en sus taburetes?
+func _seated_at_bar(g: CustomerGroup) -> bool:
+	if g.bar_cells.size() < g.size:
+		return false
 	for i in g.size:
-		seated = seated and g.members[i].arrived() and g.members[i].last_cell == g.bar_cells[i]
-	if seated:
-		# Piden algo de beber: dinero en caja y más paciencia mientras esperan mesa.
-		g.bar_paid = true
-		finances.earn("barra", BAR_DRINK_PRICE * g.size * price_level)
-		g.patience_bonus += CustomerGroup.PATIENCE[CustomerGroup.State.EN_COLA] * 0.8
-		g.mood_bonus += 0.03
+		if not g.members[i].arrived() or g.members[i].last_cell != g.bar_cells[i]:
+			return false
+	return true
+
+
+## ¿Funciona la barra? Hace falta alguien que la sirva, bebidas y que no esté hecha un asco.
+func bar_open() -> bool:
+	if layout.bar_posts().is_empty() or not _has_role("barra"):
+		return false
+	return inventory.amount("bebidas") >= 2.0 and bar_dirty < BAR_MAX_DIRT
+
+
+## El camarero de la barra sirve las copas: dinero en caja, menos bebidas, más suciedad
+## y más paciencia mientras esperan mesa.
+func _serve_bar(g: CustomerGroup) -> void:
+	g.bar_paid = true
+	if inventory.amount("bebidas") < float(g.size):
+		g.mood_bonus -= 0.03
+		if not _warned_no_drinks:
+			_warned_no_drinks = true
+			announcement.emit("¡Se han acabado las bebidas de la barra!", g.bar_cells[0])
+		return
+	inventory.stock["bebidas"] = inventory.amount("bebidas") - float(g.size)
+	finances.earn("barra", BAR_DRINK_PRICE * g.size * price_level)
+	bar_dirty += g.size
+	g.patience_bonus += CustomerGroup.PATIENCE[CustomerGroup.State.EN_COLA] * 0.8
+	g.mood_bonus += 0.03
 
 
 ## Quien deja los abrigos: va al ropero, tarda un momento y se une al grupo en la mesa.
@@ -1269,7 +1301,7 @@ func cleanliness() -> float:
 	for t in layout.tables:
 		if t.dirty:
 			dirty_tables += 1
-	return clampf(layout.limpieza + 20.0 - 7.0 * stains.size() - 5.0 * dirty_tables, 0.0, 100.0)
+	return clampf(layout.limpieza + 20.0 - 7.0 * stains.size() - 5.0 * dirty_tables - 1.5 * bar_dirty, 0.0, 100.0)
 
 
 func _add_stain_near(cell: Vector2i) -> void:
@@ -1374,8 +1406,13 @@ func _find_task(allowed: Array = []) -> Dictionary:
 			kind = "pedido"
 		elif g.state == CustomerGroup.State.EN_COLA and free_table_for(g) != null:
 			kind = "acomodar"
+		elif g.state == CustomerGroup.State.EN_COLA and g.at_bar and not g.bar_paid and _seated_at_bar(g):
+			kind = "barra"
 		if kind != "":
 			best = _better_task(best, { "tipo": kind, "grupo": g, "edad": g.state_time }, allowed)
+	if bar_dirty >= BAR_CLEAN_AT and bar_cleaner == null and not layout.bar_posts().is_empty():
+		var urgent_bar := bar_dirty >= BAR_MAX_DIRT
+		best = _better_task(best, { "tipo": "limpiar_barra", "edad": float(bar_dirty), "prioridad": 1.5 if urgent_bar else 6.0 }, allowed)
 	# Si hay gente esperando mesa, recoger las mesas sucias corre prisa.
 	var queue_waiting := queue_head != null and free_table_for(queue_head) == null
 	for table in layout.tables:
@@ -1448,6 +1485,14 @@ func start_task(w, task: Dictionary) -> void:
 			stains[task["celda"]] = w
 			task["fase"] = "ir_mesa"
 			w.mover.go_to(layout, task["celda"])
+		"barra", "limpiar_barra":
+			if task["tipo"] == "barra":
+				task["grupo"].waiter = w
+			else:
+				bar_cleaner = w
+			task["fase"] = "ir_barra"
+			var posts := layout.bar_posts()
+			w.mover.go_to(layout, w.home if posts.has(w.home) or posts.is_empty() else posts[0])
 
 
 func _progress_waiter_task(w, dt: float) -> void:
@@ -1456,6 +1501,12 @@ func _progress_waiter_task(w, dt: float) -> void:
 		_end_waiter_task(w)
 		return
 	if w.task["tipo"] == "fregar" and not stains.has(w.task["celda"]):
+		_end_waiter_task(w)
+		return
+	if w.task["tipo"] == "barra" and (not g.at_bar or layout.bar_posts().is_empty()):
+		_end_waiter_task(w)
+		return
+	if w.task["tipo"] == "limpiar_barra" and layout.bar_posts().is_empty():
 		_end_waiter_task(w)
 		return
 	match w.task["fase"]:
@@ -1468,6 +1519,10 @@ func _progress_waiter_task(w, dt: float) -> void:
 			if w.task["tiempo"] <= 0.0:
 				w.task["fase"] = "ir_mesa"
 				w.mover.go_to(layout, g.table.service_cell)
+		"ir_barra":
+			if w.mover.arrived():
+				w.task["fase"] = "atender"
+				w.task["tiempo"] = (BAR_SERVE_TIME if w.task["tipo"] == "barra" else BAR_CLEAN_TIME) / w.speed_factor()
 		"ir_recepcion":
 			if w.mover.arrived():
 				w.task["fase"] = "atender"
@@ -1517,6 +1572,11 @@ func _finish_task(w) -> void:
 			w.task["mesa"].dirty = false
 		"fregar":
 			stains.erase(w.task["celda"])
+		"barra":
+			g.service_scores.append(w.effective_trato())
+			_serve_bar(g)
+		"limpiar_barra":
+			bar_dirty = 0
 	_end_waiter_task(w)
 
 
@@ -1528,6 +1588,8 @@ func _end_waiter_task(w) -> void:
 		if w.task["tipo"] == "acomodar" and g.state in [CustomerGroup.State.LLEGANDO, CustomerGroup.State.EN_COLA] and g.table != null:
 			g.table.group = null
 			g.table = null
+	if bar_cleaner == w:
+		bar_cleaner = null
 	var table = w.task.get("mesa")
 	if table != null and table.cleaner == w:
 		table.cleaner = null
@@ -1730,6 +1792,8 @@ func _restock() -> void:
 
 func _close_day() -> void:
 	refresh_candidates()
+	_warned_no_drinks = false
+	bar_dirty = 0  # El servicio de limpieza de la noche también deja la barra impecable.
 	# Por la noche el gestor descansa.
 	manager.energy = 100.0
 	# El servicio de limpieza de la noche deja el local impecable para mañana.

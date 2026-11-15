@@ -13,5 +13,6 @@
 	{ "id": "queso", "nombre": "Queso", "unidad": "kg", "precio_base": 12.0, "caducidad_dias": 20, "almacenaje": "refrigerado" },
 	{ "id": "pan", "nombre": "Pan", "unidad": "ud", "precio_base": 0.6, "caducidad_dias": 1, "almacenaje": "seco" },
 	{ "id": "harina", "nombre": "Harina", "unidad": "kg", "precio_base": 0.8, "caducidad_dias": 180, "almacenaje": "seco" },
-	{ "id": "leche", "nombre": "Leche", "unidad": "l", "precio_base": 1.0, "caducidad_dias": 10, "almacenaje": "refrigerado" }
+	{ "id": "leche", "nombre": "Leche", "unidad": "l", "precio_base": 1.0, "caducidad_dias": 10, "almacenaje": "refrigerado" },
+	{ "id": "bebidas", "nombre": "Bebidas de la barra", "unidad": "ud", "precio_base": 0.9, "caducidad_dias": 60, "almacenaje": "seco" }
 ]

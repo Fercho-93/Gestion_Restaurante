@@ -39,6 +39,7 @@ func _initialize() -> void:
 	test_floors_and_walls()
 	test_rooms()
 	test_staff_roles()
+	test_bar_needs()
 	await test_camera_follows_fingers()
 	print("\n%d comprobaciones, %d fallos" % [_checks, _failures])
 	quit(1 if _failures > 0 else 0)
@@ -1124,14 +1125,14 @@ func test_floors_and_walls() -> void:
 
 
 ## Un local mediano vacío con las cuatro habitaciones montadas (y mesas en el resto).
-func _equipped_local(with_wc: bool, seed_value: int) -> RestaurantSim:
+func _equipped_local(with_wc: bool, seed_value: int, bartender := true) -> RestaurantSim:
 	var data = load("res://simulation/game_data.gd").new()
 	data.load_all()
 	var sim := RestaurantSim.new(data.sim_data("universitario", "mediano"), 11 * 60, seed_value)
 	data.free()
 	sim.free_build = true
 	check(sim.create_room("ropero", Vector2i(0, 3), Vector2i(0, 4)) == "", "se crea el ropero")
-	check(sim.create_room("barra", Vector2i(1, 5), Vector2i(4, 5)) == "", "se crea la barra")
+	check(sim.create_room("barra", Vector2i(1, 5), Vector2i(4, 6)) == "", "se crea la barra")
 	check(sim.buy_furniture("perchero", Vector2i(0, 3), 0) == "", "perchero")
 	check(sim.buy_furniture("barra_bar", Vector2i(1, 5), 0) == "" and sim.buy_furniture("barra_bar", Vector2i(2, 5), 0) == "", "mostrador de la barra")
 	check(sim.buy_furniture("taburete", Vector2i(3, 5), 0) == "" and sim.buy_furniture("taburete", Vector2i(4, 5), 0) == "", "taburetes")
@@ -1147,6 +1148,8 @@ func _equipped_local(with_wc: bool, seed_value: int) -> RestaurantSim:
 	check(sim.layout.accessibility_problem() == "", "todo sigue accesible")
 	sim.free_build = false
 	sim.finances.money = 50000.0
+	if bartender:
+		check(sim.hire(0) == "" and sim.set_role(sim.staff.back(), "barra") == "", "se contrata a alguien para la barra")
 	return sim
 
 
@@ -1219,7 +1222,7 @@ func test_rooms() -> void:
 
 
 func test_staff_roles() -> void:
-	var sim := _equipped_local(true, 11)
+	var sim := _equipped_local(true, 11, false)
 	var lucia: StaffMember = sim.staff.filter(func(m: StaffMember): return m.rol == "sala")[0]
 	check(lucia.rol == "sala" and lucia.puesto == StaffMember.ROLE_WAITER, "el camarero de serie está en sala")
 	check(sim.staff.any(func(m: StaffMember): return m.rol == "cocina"), "y el cocinero en cocina")
@@ -1239,7 +1242,7 @@ func test_staff_roles() -> void:
 	check(sim.set_role(cleaner, "cocina") != "", "no hay un tercer fogón")
 	check(sim.layout.cook_stations.has(greeter.home), "el segundo cocinero va a un fogón")
 	check(sim.set_role(greeter, "acomodador") == "", "y se le devuelve a acompañar")
-	check(sim.set_role(lucia, "barra") != "" or sim.layout.bar_posts().size() > 0, "sin sitio tras la barra no se pone a nadie")
+	check(sim.role_problem(lucia, "barra") == "" and sim.layout.bar_posts().size() >= 1, "hay sitio tras la barra para el de la barra")
 	# Cada uno solo hace lo suyo.
 	var done := { "sala": {}, "limpieza": {}, "acomodador": {}, "cocina": {} }
 	while sim.minutes < 24 * 60:
@@ -1263,3 +1266,50 @@ func test_staff_roles() -> void:
 	while solo.staff.size() > 1:
 		solo.fire(solo.staff[0])
 	check(solo.fire(solo.staff[0]) != "", "no se despide al último")
+
+
+func test_bar_needs() -> void:
+	# Sin nadie que la sirva, la barra no funciona.
+	var empty := _equipped_local(true, 7, false)
+	check(not empty.bar_open(), "sin camarero de barra no abre")
+	var went := 0
+	while empty.minutes < 24 * 60:
+		empty.update(0.25)
+		for g in empty.groups:
+			if g.at_bar:
+				went += 1
+	check(went == 0, "nadie se sienta en una barra sin servir")
+	# Con camarero: sirve, gasta bebidas y se ensucia; limpiar la deja bien.
+	var sim := _equipped_local(true, 7, true)
+	check(sim.bar_open(), "con camarero y bebidas abre")
+	check(sim.staff.back().home in sim.layout.bar_posts(), "el camarero de la barra se queda tras ella")
+	var drinks := sim.inventory.amount("bebidas")
+	var max_dirt := 0
+	var report := {}
+	sim.day_closed.connect(func(r: Dictionary): report.merge(r))
+	var cleaned := false
+	var previous := 0
+	while sim.minutes < 24 * 60:
+		sim.update(0.25)
+		max_dirt = maxi(max_dirt, sim.bar_dirty)
+		if sim.bar_dirty < previous and sim.bar_dirty == 0 and sim.minutes < 23 * 60:
+			cleaned = true
+		previous = sim.bar_dirty
+	check(report.get("ingresos", {}).get("barra", 0.0) > 0.0, "la barra vende")
+	check(sim.inventory.amount("bebidas") < drinks or sim.minutes > 24 * 60, "gasta bebidas")
+	check(max_dirt >= RestaurantSim.BAR_CLEAN_AT or max_dirt > 0, "las copas ensucian la barra (%d)" % max_dirt)
+	check(cleaned or max_dirt < RestaurantSim.BAR_CLEAN_AT, "la barra se limpia cuando se ensucia")
+	# Sin bebidas no abre; con la barra sucia del todo, tampoco.
+	sim.inventory.stock["bebidas"] = 0.0
+	check(not sim.bar_open(), "sin bebidas no abre")
+	sim.inventory.stock["bebidas"] = 30.0
+	sim.bar_dirty = RestaurantSim.BAR_MAX_DIRT
+	check(not sim.bar_open(), "demasiado sucia no abre")
+	# Una limpiadora se encarga de la barra (con prioridad si está muy sucia).
+	check(sim.hire(0) == "" and sim.set_role(sim.staff.back(), "limpieza") == "", "se contrata a alguien de limpieza")
+	var saw_cleaning := false
+	for i in 400:
+		sim.update(0.25)
+		if sim.staff.any(func(m: StaffMember): return m.task.get("tipo", "") == "limpiar_barra"):
+			saw_cleaning = true
+	check(saw_cleaning and sim.bar_dirty < RestaurantSim.BAR_MAX_DIRT, "se limpia la barra sucia")
